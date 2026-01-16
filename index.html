@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="zh-TW" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>旋律創作棋盤 (模進句版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&amp;family=Fredoka:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    body { box-sizing: border-box; }
+    * { font-family: 'Noto Sans TC', 'Fredoka', sans-serif; }
+    
+    .board-cell { transition: all 0.3s ease; z-index: 10; position: relative; }
+    .board-cell:hover { transform: scale(1.05); }
+    .board-cell.visited {
+      box-shadow: 0 0 20px rgba(255, 193, 7, 0.6);
+      border: 2px solid #fff;
+      opacity: 1 !important;
+    }
+    .end-cell { background: linear-gradient(135deg, #ec4899 0%, #db2777 100%) !important; }
+    
+    /* Animations */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+    .shake { animation: shake 0.3s ease-in-out; }
+    .player-piece { animation: bounce 0.5s ease infinite alternate; }
+    @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+    .playing { animation: pulse 0.3s ease-in-out; transform: scale(1.1); filter: brightness(1.2); }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
+    
+    /* Input UI Styles */
+    .note-btn { transition: all 0.2s; }
+    .note-btn:active { transform: scale(0.95); }
+    
+    /* View Handling */
+    .view-section { transition: opacity 0.3s ease; }
+    .hidden { display: none !important; opacity: 0; }
+
+    /* SVG Path */
+    #path-svg {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 1;
+    }
+    .path-line {
+      stroke: rgba(255, 255, 255, 0.6); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round;
+      fill: none; filter: drop-shadow(0 0 4px rgba(255, 193, 7, 0.5)); transition: all 0.3s ease;
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 overflow-auto">
+  <div class="w-full min-h-full p-4 md:p-6">
+   <div class="max-w-4xl mx-auto">
+    
+    <div class="text-center mb-6">
+     <h1 id="game-title" class="text-3xl md:text-4xl font-bold text-white mb-2 drop-shadow-lg">🎵 旋律創作棋盤 🎵</h1>
+     <p class="text-purple-200 text-sm md:text-base">創作 -> 伴奏 -> 作曲手法 (重複/模仿/模進)</p>
+    </div>
+
+    <div id="view-game" class="view-section">
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 mb-6">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3"><span class="text-white font-medium">步數：</span>
+            <div class="flex gap-1"><span id="step-count" class="text-2xl font-bold text-yellow-300">1</span>
+            </div>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+                <button id="play-btn" class="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2"> <span>▶</span> 播放旋律 </button> 
+                <button id="play-acc-btn" class="hidden px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl font-medium hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg flex items-center gap-2"> <span>🎹</span> 加入伴奏播放 </button> 
+                <button id="technique-btn" class="hidden px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-cyan-700 transition-all shadow-lg flex items-center gap-2"> <span>✨</span> 作曲手法 </button> 
+                <button id="reset-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-xl font-medium hover:from-red-600 hover:to-pink-700 transition-all shadow-lg flex items-center gap-2"> <span>↺</span> 重置 </button>
+            </div>
+            </div>
+        </div>
+
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 md:p-6 mb-6 relative">
+            <svg id="path-svg"></svg>
+            <div id="board" class="grid grid-cols-4 gap-3 md:gap-4 relative z-10"></div>
+        </div>
+
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+            <h2 class="text-white font-bold text-lg mb-3 flex items-center gap-2"><span>🎼</span> 已收集的旋律</h2>
+            <div id="melody-display" class="flex flex-wrap gap-2 min-h-16 items-center"></div>
+        </div>
+        
+        <div class="mt-4 flex flex-wrap justify-center gap-4 text-sm text-white/70">
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-green-400 to-emerald-500"></div><span>起點</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-blue-400 to-cyan-500"></div><span>1拍 (♩)</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-orange-400 to-amber-500"></div><span>0.5+0.5拍 (♪♪)</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-pink-500 to-pink-600"></div><span>2拍 (𝅗𝅥)</span></div>
+        </div>
+    </div>
+
+    <div id="view-technique-menu" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full shadow-2xl">
+            <h2 class="text-2xl font-bold text-indigo-900 mb-6 text-center">選擇作曲手法</h2>
+            <div class="grid gap-4">
+                <button onclick="selectTechnique('repetition')" class="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold text-lg hover:from-blue-600 hover:to-indigo-700 hover:scale-[1.02] transition-all shadow-md flex items-center justify-between">
+                    <span>🔄 重複句 (Repetition)</span>
+                </button>
+                <button onclick="selectTechnique('imitation')" class="p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl font-bold text-lg hover:from-purple-600 hover:to-pink-700 hover:scale-[1.02] transition-all shadow-md flex items-center justify-between">
+                    <span>🦜 模仿句 (Imitation)</span>
+                </button>
+                <button onclick="selectTechnique('sequence')" class="p-4 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl font-bold text-lg hover:from-teal-600 hover:to-cyan-700 hover:scale-[1.02] transition-all shadow-md flex items-center justify-between">
+                    <span>📈 模進句 (Sequence)</span>
+                    <span class="text-sm opacity-80 bg-white/20 px-2 py-1 rounded">新功能</span>
+                </button>
+            </div>
+            <button onclick="closeTechniqueMenu()" class="mt-6 w-full py-2 text-gray-500 hover:text-gray-700 font-medium">返回棋盤</button>
+        </div>
+    </div>
+
+    <div id="view-repetition" class="hidden view-section">
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">🔄 重複句 (Repetition)</h2>
+                <div class="flex gap-2">
+                    <button onclick="playRepetition()" id="btn-play-rep" class="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2">
+                        <span>▶</span> 播放
+                    </button>
+                    <button onclick="backToGame()" class="px-4 py-2 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all">返回</button>
+                </div>
+            </div>
+            <div class="space-y-6">
+                <div class="bg-black/20 rounded-xl p-4">
+                    <div class="text-purple-300 font-bold mb-2 text-sm uppercase">第一句</div>
+                    <div id="rep-phrase-1" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
+                </div>
+                <div class="bg-black/20 rounded-xl p-4">
+                    <div class="text-yellow-300 font-bold mb-2 text-sm uppercase">第二句 (完全重複)</div>
+                    <div id="rep-phrase-2" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-imitation" class="hidden view-section">
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
+            <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+                <h2 class="text-2xl font-bold text-white">🦜 模仿句 (Imitation)</h2>
+                <div class="flex gap-2">
+                    <button onclick="playImitation()" id="btn-play-imi" class="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2">
+                        <span>▶</span> 播放
+                    </button>
+                    <button onclick="swapImitationPhrases()" class="px-5 py-2 bg-gradient-to-r from-orange-400 to-pink-500 text-white rounded-xl font-bold hover:from-orange-500 hover:to-pink-600 transition-all shadow-lg flex items-center gap-2">
+                        <span>⇄</span> 交換
+                    </button>
+                    <button onclick="backToGame()" class="px-4 py-2 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all">返回</button>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="bg-black/20 rounded-xl p-4 relative">
+                    <div class="text-purple-300 font-bold mb-2 text-sm uppercase">第一句</div>
+                    <div id="imi-phrase-1" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
+                </div>
+                <div class="bg-black/20 rounded-xl p-4">
+                    <div class="text-yellow-300 font-bold mb-2 text-sm uppercase">第二句 (第6格輸入, 第7格變奏)</div>
+                    <div id="imi-phrase-2" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
+                    <div id="imi-editor" class="mt-4 p-4 bg-white/10 rounded-lg border border-white/10">
+                        <div class="text-white font-bold mb-2">第六格編輯區：</div>
+                        <div class="flex flex-wrap gap-4 items-center">
+                            <div class="flex bg-black/30 rounded-lg p-1">
+                                <button onclick="setEditRhythm('1')" id="rhythm-ta" class="px-3 py-1 text-white rounded-md bg-green-500">♩ Ta</button>
+                                <button onclick="setEditRhythm('split')" id="rhythm-titi" class="px-3 py-1 text-white rounded-md">♪♪ Ti-Ti</button>
+                            </div>
+                            <div class="flex flex-wrap gap-1">
+                                <button onclick="addEditNote('d')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">d</button>
+                                <button onclick="addEditNote('r')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">r</button>
+                                <button onclick="addEditNote('m')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">m</button>
+                                <button onclick="addEditNote('f')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">f</button>
+                                <button onclick="addEditNote('s')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">s</button>
+                                <button onclick="addEditNote('l')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">l</button>
+                                <button onclick="addEditNote('t')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">t</button>
+                                <button onclick="addEditNote(`d'`)" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">d'</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-sequence" class="hidden view-section">
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
+            <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+                <h2 class="text-2xl font-bold text-white">📈 模進句 (Sequence)</h2>
+                <div class="flex gap-2">
+                    <button onclick="playSequenceMode()" id="btn-play-seq" class="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2">
+                        <span>▶</span> 播放模進樂段
+                    </button>
+                    <button onclick="backToGame()" class="px-4 py-2 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all">返回</button>
+                </div>
+            </div>
+
+            <div class="mb-6 p-4 bg-white/10 rounded-xl">
+                <p class="text-white mb-3 font-bold">請選擇模進形式 (填入第二、三句)：</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="generateSequence('up2')" class="seq-opt-btn px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition shadow">↗ 上行二度 (+1)</button>
+                    <button onclick="generateSequence('up3')" class="seq-opt-btn px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition shadow">↗↗ 上行三度 (+2)</button>
+                    <button onclick="generateSequence('down2')" class="seq-opt-btn px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition shadow">↘ 下行二度 (-1)</button>
+                    <button onclick="generateSequence('down3')" class="seq-opt-btn px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition shadow">↘↘ 下行三度 (-2)</button>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="bg-black/20 rounded-xl p-3 border-l-4 border-purple-400">
+                    <div class="text-purple-300 font-bold text-xs uppercase mb-1">第一句 (第1-4格)</div>
+                    <div id="seq-phrase-1" class="flex flex-wrap gap-2 items-center min-h-[3rem]"></div>
+                </div>
+
+                <div class="bg-black/30 rounded-xl p-3 border-l-4 border-yellow-400">
+                    <div class="text-yellow-300 font-bold text-xs uppercase mb-1 flex justify-between">
+                        <span>第二句 (模進)</span>
+                        <span id="seq-lbl-2" class="opacity-70">等待選擇...</span>
+                    </div>
+                    <div id="seq-phrase-2" class="flex flex-wrap gap-2 items-center min-h-[3rem]">
+                        <span class="text-white/30 italic text-sm">請選擇上方模進形式</span>
+                    </div>
+                </div>
+
+                <div class="bg-black/30 rounded-xl p-3 border-l-4 border-yellow-400">
+                    <div class="text-yellow-300 font-bold text-xs uppercase mb-1 flex justify-between">
+                        <span>第三句 (模進)</span>
+                        <span id="seq-lbl-3" class="opacity-70">等待選擇...</span>
+                    </div>
+                    <div id="seq-phrase-3" class="flex flex-wrap gap-2 items-center min-h-[3rem]">
+                        <span class="text-white/30 italic text-sm">請選擇上方模進形式</span>
+                    </div>
+                </div>
+
+                <div class="bg-black/20 rounded-xl p-3 border-l-4 border-pink-400">
+                    <div class="text-pink-300 font-bold text-xs uppercase mb-1">第四句 (第5-7格)</div>
+                    <div id="seq-phrase-4" class="flex flex-wrap gap-2 items-center min-h-[3rem]"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+   </div>
+  </div>
+
+  <script>
+    // --- Configuration & Data ---
+    const defaultConfig = { game_title: '旋律創作棋盤' };
+
+    // Expanded Scale Array for Transposition
+    // Covers range from d,, (Low Low) to s'' (High High) to prevent index errors
+    const scaleArray = [
+        'd,,', 'r,,', 'm,,', 'f,,', 's,,', 'l,,', 't,,', 
+        'd,', 'r,', 'm,', 'f,', 's,', 'l,', 't,', 
+        'd', 'r', 'm', 'f', 's', 'l', 't', 
+        "d'", "r'", "m'", "f'", "s'", "l'", "t'",
+        "d''", "r''", "m''", "f''", "s''" 
+    ];
+
+    // Frequencies mapped to all scale notes
+    const noteFrequencies = {
+      'd,,': 65.41, 'r,,': 73.42, 'm,,': 82.41, 'f,,': 87.31, 's,,': 98.00, 'l,,': 110.00, 't,,': 123.47,
+      'd,': 130.81, 'r,': 146.83, 'm,': 164.81, 'f,': 174.61, 's,': 196.00, 'l,': 220.00, 't,': 246.94,
+      'd': 261.63, 'r': 293.66, 'm': 329.63, 'f': 349.23, 's': 392.00, 'l': 440.00, 't': 493.88, 
+      "d'": 523.25, "r'": 587.33, "m'": 659.25, "f'": 698.46, "s'": 783.99, "l'": 880.00, "t'": 987.77,
+      "d''": 1046.50, "r''": 1174.66, "m''": 1318.51, "f''": 1396.91, "s''": 1567.98
+    };
+
+    // Original Accompaniment Pattern
+    const defaultAccompaniment = [
+        [{n:'d,,', d:0.5}, {n:'s,,', d:0.5}], // 1
+        [{n:'d,', d:1.0}], // 2
+        [{n:'d,,', d:0.5}, {n:'s,,', d:0.5}], // 3
+        [{n:'d,', d:1.0}], // 4
+        [{n:'f,,', d:0.5}, {n:'d,', d:0.5}], // 5
+        [{n:'f,', d:1.0}], // 6
+        [{n:'d,,', d:0.5}, {n:'s,,', d:0.5}, {n:'d,', d:1.0}] // 7 (End)
+    ];
+    
+    // Grid Data
+    const gridData = [
+        { notes: ['d'], type: 'start', label: '起點' }, { notes: ['r'], type: 'normal' },
+        { notes: ['m', 's'], type: 'split' }, { notes: ['s'], type: 'normal' },
+        { notes: ['s'], type: 'normal' }, { notes: ['m'], type: 'normal' },
+        { notes: ['m'], type: 'normal' }, { notes: ['f'], type: 'normal' },
+        { notes: ["d'"], type: 'normal' }, { notes: ['s'], type: 'normal' },
+        { notes: ['f', 'm'], type: 'split' }, { notes: ['r', 'm'], type: 'split' }, 
+        { notes: ['d'], type: 'normal' }, { notes: ['m'], type: 'normal' },
+        { notes: ['r', 'd'], type: 'split' }, { notes: ['d'], type: 'end', duration: 2, label: '終點' } 
+    ];
+
+    // State
+    let collectedMelody = [];
+    let visitedCells = []; 
+    let audioContext = null;
+
+    // Sequence State
+    let seqP1 = [], seqP2 = [], seqP3 = [], seqP4 = [];
+    let seqAcc1 = [], seqAcc2 = [], seqAcc3 = [], seqAcc4 = [];
+
+    // Imitation State
+    let imiPhrase1 = [], imiPhrase2 = [];
+    let imiAcc1 = [], imiAcc2 = [];
+    let currentEditRhythm = '1';
+
+    // --- Core Game Functions ---
+    function generateBoard() {
+      const board = document.getElementById('board');
+      board.innerHTML = '';
+      
+      document.getElementById('play-acc-btn').classList.add('hidden');
+      document.getElementById('technique-btn').classList.add('hidden');
+      switchView('game');
+
+      gridData.forEach((data, index) => {
+        const cell = document.createElement('div');
+        let bgClass = data.type === 'split' ? 'bg-gradient-to-br from-orange-400 to-amber-500' : 
+                      data.type === 'start' ? 'bg-gradient-to-br from-green-400 to-emerald-500' :
+                      data.type === 'end' ? 'end-cell' : 'bg-gradient-to-br from-blue-400 to-cyan-500';
+        let icon = data.type === 'split' ? '♪♪' : data.type === 'end' ? '𝅗𝅥' : '♩';
+        
+        cell.className = `board-cell ${bgClass} rounded-xl p-2 cursor-pointer flex flex-col items-center justify-center min-h-24 opacity-70 hover:opacity-100`;
+        cell.id = `cell-${index}`;
+        cell.innerHTML = `
+          <div class="text-2xl font-bold text-white flex gap-1">${data.notes.join(' ')}</div>
+          <div class="text-xs text-white/80 mt-1 font-bold">${data.label || icon}</div>
+          <div id="player-${index}" class="hidden mt-1 w-6 h-6 rounded-full bg-yellow-400 flex items-center justify-center text-xs shadow-lg player-piece">♪</div>
+        `;
+        cell.addEventListener('click', () => handleCellClick(index));
+        board.appendChild(cell);
+      });
+
+      visitedCells = [0];
+      collectedMelody = [gridData[0]];
+      updateVisuals(0);
+      updateMelodyDisplay();
+      setTimeout(drawPath, 100);
+    }
+
+    function handleCellClick(index) {
+        const lastIndex = visitedCells[visitedCells.length - 1];
+        const visitedPos = visitedCells.indexOf(index);
+        
+        if (visitedPos !== -1) {
+            if (visitedPos === visitedCells.length - 1) return;
+            const toRemove = visitedCells.slice(visitedPos + 1);
+            toRemove.forEach(idx => {
+                const c = document.getElementById(`cell-${idx}`);
+                c.classList.remove('visited', 'opacity-100');
+                c.classList.add('opacity-70');
+                document.getElementById(`player-${idx}`).classList.add('hidden');
+            });
+            visitedCells = visitedCells.slice(0, visitedPos + 1);
+            collectedMelody = collectedMelody.slice(0, visitedPos + 1);
+            
+            document.getElementById('play-acc-btn').classList.add('hidden');
+            document.getElementById('technique-btn').classList.add('hidden');
+            const winMsg = document.querySelector('.win-msg');
+            if(winMsg) winMsg.remove();
+            
+            updateVisuals(index);
+            playCellSound(gridData[index]);
+            updateMelodyDisplay();
+            drawPath();
+            return;
+        }
+
+        if (gridData[lastIndex].type === 'end') return;
+        if (!isValidMove(lastIndex, index)) {
+            const cell = document.getElementById(`cell-${index}`);
+            cell.classList.add('shake');
+            setTimeout(() => cell.classList.remove('shake'), 300);
+            return;
+        }
+
+        visitedCells.push(index);
+        collectedMelody.push(gridData[index]);
+        updateVisuals(index);
+        playCellSound(gridData[index]);
+        updateMelodyDisplay();
+        drawPath();
+
+        if (gridData[index].type === 'end') showCompletion();
+    }
+
+    function updateVisuals(index) {
+        const cell = document.getElementById(`cell-${index}`);
+        cell.classList.add('visited');
+        cell.classList.remove('opacity-70');
+        document.querySelectorAll('.player-piece').forEach(el => el.classList.add('hidden'));
+        document.getElementById(`player-${index}`).classList.remove('hidden');
+    }
+
+    function isValidMove(curr, target) {
+        const r1 = Math.floor(curr/4), c1 = curr%4, r2 = Math.floor(target/4), c2 = target%4;
+        return (r1===r2 && c2===c1+1) || (c1===c2 && r2===r1+1);
+    }
+
+    // --- Audio ---
+    function playNote(note, startTime, duration, shiftOctave=false) {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.type = 'sine';
+        let freq = noteFrequencies[note] || 261.63;
+        if (shiftOctave) freq *= 2;
+        osc.frequency.value = freq;
+        const now = audioContext.currentTime + startTime;
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+        osc.start(now);
+        osc.stop(now + duration);
+    }
+
+    function playCellSound(data) {
+        if (data.type === 'split') {
+            playNote(data.notes[0], 0, 0.2, true);
+            playNote(data.notes[1], 0.25, 0.2, true);
+        } else {
+            playNote(data.notes[0], 0, data.duration===2 ? 0.8 : 0.4, true);
+        }
+    }
+
+    async function playSequence(melody, accArray, buttonId, noteClassPrefix) {
+        const playBtn = document.getElementById(buttonId);
+        const originalText = playBtn.innerHTML;
+        playBtn.disabled = true;
+        playBtn.innerHTML = '<span>🎵</span> ...';
+
+        let currentTime = 0;
+        const beatDuration = 0.6; 
+
+        melody.forEach((item, index) => {
+            const stepStart = currentTime;
+            let stepDur = item.duration === 2 ? beatDuration * 2 : beatDuration;
+
+            setTimeout(() => {
+                const els = document.querySelectorAll(`.${noteClassPrefix}-item`);
+                if(els[index]) {
+                    els[index].classList.add('playing');
+                    setTimeout(() => els[index].classList.remove('playing'), 200);
+                }
+            }, stepStart * 1000);
+
+            // Melody
+            if (item.type === 'split') {
+                playNote(item.notes[0], stepStart, beatDuration*0.5, true);
+                if(item.notes[1]) playNote(item.notes[1], stepStart + beatDuration*0.5, beatDuration*0.5, true);
+            } else {
+                playNote(item.notes[0], stepStart, stepDur, true);
+            }
+
+            // Accompaniment
+            if (accArray && accArray[index]) {
+                let accOffset = 0;
+                accArray[index].forEach(n => {
+                    playNote(n.n, stepStart + accOffset, n.d * beatDuration, true);
+                    accOffset += n.d * beatDuration;
+                });
+            }
+            currentTime += stepDur;
+        });
+
+        setTimeout(() => {
+            playBtn.disabled = false;
+            playBtn.innerHTML = originalText;
+        }, currentTime * 1000 + 200);
+    }
+
+    // --- Transposition Logic ---
+    function getNoteIndex(note) {
+        return scaleArray.indexOf(note);
+    }
+
+    function transposeNote(note, steps) {
+        const idx = getNoteIndex(note);
+        if (idx === -1) return note; // Fallback
+        const newIdx = Math.max(0, Math.min(scaleArray.length - 1, idx + steps));
+        return scaleArray[newIdx];
+    }
+
+    function transposePhrase(phrase, acc, steps) {
+        // Transpose Melody
+        const newPhrase = phrase.map(cell => {
+            const newNotes = cell.notes.map(n => transposeNote(n, steps));
+            return { ...cell, notes: newNotes };
+        });
+        
+        // Transpose Accompaniment
+        const newAcc = acc.map(stepPattern => {
+            return stepPattern.map(n => ({ ...n, n: transposeNote(n.n, steps) }));
+        });
+
+        return { melody: newPhrase, acc: newAcc };
+    }
+
+    // --- Sequence View Logic ---
+    function setupSequenceView() {
+        // Define phrases
+        // Phrase 1: Indices 0, 1, 2, 3
+        seqP1 = collectedMelody.slice(0, 4);
+        seqAcc1 = defaultAccompaniment.slice(0, 4);
+        
+        // Phrase 4: Indices 4, 5, 6, 7 (Rest of collected)
+        seqP4 = collectedMelody.slice(4);
+        seqAcc4 = defaultAccompaniment.slice(4);
+
+        // Reset generated
+        seqP2 = []; seqP3 = [];
+        seqAcc2 = []; seqAcc3 = [];
+
+        // Render Fixed parts
+        document.getElementById('seq-phrase-1').innerHTML = seqP1.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
+        document.getElementById('seq-phrase-4').innerHTML = seqP4.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
+        
+        // Clear generated UI
+        document.getElementById('seq-phrase-2').innerHTML = '<span class="text-white/30 italic text-sm">請選擇上方模進形式</span>';
+        document.getElementById('seq-phrase-3').innerHTML = '<span class="text-white/30 italic text-sm">請選擇上方模進形式</span>';
+
+        switchView('sequence');
+    }
+
+    function generateSequence(type) {
+        let step = 0;
+        let label = '';
+        if (type === 'up2') { step = 1; label = '+1 (上行二度)'; }
+        else if (type === 'up3') { step = 2; label = '+2 (上行三度)'; }
+        else if (type === 'down2') { step = -1; label = '-1 (下行二度)'; }
+        else if (type === 'down3') { step = -2; label = '-2 (下行三度)'; }
+
+        // Generate P2 from P1
+        const res2 = transposePhrase(seqP1, seqAcc1, step);
+        seqP2 = res2.melody;
+        seqAcc2 = res2.acc;
+
+        // Generate P3 from P2 (Cumulative sequence)
+        const res3 = transposePhrase(seqP2, seqAcc2, step);
+        seqP3 = res3.melody;
+        seqAcc3 = res3.acc;
+
+        // Render
+        document.getElementById('seq-lbl-2').textContent = label;
+        document.getElementById('seq-lbl-3').textContent = label + " (再模進)";
+        document.getElementById('seq-phrase-2').innerHTML = seqP2.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
+        document.getElementById('seq-phrase-3').innerHTML = seqP3.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
+    }
+
+    function playSequenceMode() {
+        if (seqP2.length === 0) { alert('請先選擇模進形式'); return; }
+        
+        const fullMelody = [...seqP1, ...seqP2, ...seqP3, ...seqP4];
+        const fullAcc = [...seqAcc1, ...seqAcc2, ...seqAcc3, ...seqAcc4];
+        
+        playSequence(fullMelody, fullAcc, 'btn-play-seq', 'seq-note-item');
+    }
+
+    // --- UI Helpers ---
+    function drawPath() {
+        const svg = document.getElementById('path-svg');
+        if (visitedCells.length < 2) { svg.innerHTML = ''; return; }
+        let d = '';
+        visitedCells.forEach((idx, i) => {
+            const el = document.getElementById(`cell-${idx}`);
+            const x = el.offsetLeft + el.offsetWidth/2, y = el.offsetTop + el.offsetHeight/2;
+            d += (i===0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+        });
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", d);
+        path.classList.add("path-line");
+        svg.innerHTML = '';
+        svg.appendChild(path);
+    }
+
+    function createNoteHTML(item, extraClass='') {
+        let bg = item.type === 'split' ? 'bg-gradient-to-r from-orange-400 to-amber-500' :
+                 item.type === 'end' ? 'bg-gradient-to-r from-pink-500 to-pink-600' :
+                 item.type === 'editing' ? 'bg-gray-500 border-2 border-yellow-300' :
+                 'bg-gradient-to-r from-blue-400 to-cyan-500';
+        let icon = item.type === 'split' ? '♪♪' : item.type === 'end' ? '𝅗𝅥' : '♩';
+        let notes = item.notes ? item.notes.join(' ') : '?';
+        
+        return `<div class="${extraClass} ${bg} px-3 py-2 rounded-lg text-white font-medium shadow-md flex flex-col items-center min-w-[3rem]">
+            <span class="text-lg">${notes}</span>
+            <span class="text-xs opacity-80">${icon}</span>
+        </div>`;
+    }
+
+    function updateMelodyDisplay() {
+        document.getElementById('melody-display').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'melody-note melody-note-item')).join('<span class="text-white/50">→</span>');
+        document.getElementById('step-count').textContent = collectedMelody.length;
+    }
+
+    function showCompletion() {
+        const msg = document.createElement('div');
+        msg.className = 'win-msg w-full text-center mt-4 p-3 bg-white/20 rounded-xl text-yellow-300 font-bold animate-pulse';
+        msg.textContent = '🎉 抵達終點！現在可以加入伴奏或使用作曲手法！ 🎉';
+        document.getElementById('melody-display').parentElement.appendChild(msg);
+        document.getElementById('play-acc-btn').classList.remove('hidden');
+        document.getElementById('technique-btn').classList.remove('hidden');
+    }
+
+    // --- Views ---
+    function switchView(view) {
+        ['view-game', 'view-technique-menu', 'view-repetition', 'view-imitation', 'view-sequence'].forEach(id => document.getElementById(id).classList.add('hidden'));
+        if (view === 'menu') {
+            document.getElementById('view-game').classList.remove('hidden');
+            document.getElementById('view-technique-menu').classList.remove('hidden');
+        } else {
+            document.getElementById(`view-${view}`).classList.remove('hidden');
+        }
+    }
+
+    document.getElementById('technique-btn').addEventListener('click', () => switchView('menu'));
+    function closeTechniqueMenu() { document.getElementById('view-technique-menu').classList.add('hidden'); }
+    function backToGame() { switchView('game'); }
+
+    function selectTechnique(type) {
+        closeTechniqueMenu();
+        if (type === 'repetition') setupRepetition();
+        else if (type === 'imitation') setupImitation();
+        else if (type === 'sequence') setupSequenceView();
+    }
+
+    // --- Repetition & Imitation & Editor Logic (Kept from previous) ---
+    function setupRepetition() {
+        document.getElementById('rep-phrase-1').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'rep-note-item')).join('<span class="text-white/50">→</span>');
+        document.getElementById('rep-phrase-2').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'rep-note-item')).join('<span class="text-white/50">→</span>');
+        switchView('repetition');
+    }
+    function playRepetition() {
+        const fullMelody = [...collectedMelody, ...collectedMelody];
+        const fullAcc = [...defaultAccompaniment.slice(0, collectedMelody.length), ...defaultAccompaniment.slice(0, collectedMelody.length)];
+        playSequence(fullMelody, fullAcc, 'btn-play-rep', 'rep-note-item');
+    }
+    function setupImitation() {
+        imiPhrase1 = JSON.parse(JSON.stringify(collectedMelody));
+        imiAcc1 = defaultAccompaniment.slice(0, imiPhrase1.length);
+        imiPhrase2 = JSON.parse(JSON.stringify(collectedMelody));
+        imiAcc2 = defaultAccompaniment.slice(0, imiPhrase2.length);
+        if (imiPhrase2.length > 5) imiPhrase2[5] = { notes: ['?'], type: 'editing', duration: 1 };
+        if (imiPhrase2.length > 6) {
+            imiPhrase2[6] = { notes: ['r'], type: 'end', duration: 2, label: '變奏' };
+            imiAcc2[6] = [{n:'s,,', d:0.5}, {n:'r,', d:0.5}, {n:'s,', d:1.0}];
+        }
+        renderImitationPhrases();
+        setEditRhythm('1');
+        switchView('imitation');
+    }
+    function renderImitationPhrases() {
+        document.getElementById('imi-phrase-1').innerHTML = imiPhrase1.map(i => createNoteHTML(i, 'imi-note-item')).join('<span class="text-white/50">→</span>');
+        document.getElementById('imi-phrase-2').innerHTML = imiPhrase2.map((item, idx) => {
+            const html = createNoteHTML(item, 'imi-note-item');
+            return idx === 5 ? `<div class="relative group cursor-pointer border-2 border-yellow-300 rounded-lg transform scale-105">${html}</div>` : html;
+        }).join('<span class="text-white/50">→</span>');
+    }
+    function setEditRhythm(r) {
+        currentEditRhythm = r;
+        imiPhrase2[5].type = r === 'split' ? 'split' : 'normal';
+        imiPhrase2[5].notes = r === 'split' ? ['?', '?'] : ['?'];
+        document.getElementById('rhythm-ta').className = r==='1' ? 'px-3 py-1 text-white rounded-md bg-green-500' : 'px-3 py-1 text-white rounded-md hover:bg-white/20';
+        document.getElementById('rhythm-titi').className = r==='split' ? 'px-3 py-1 text-white rounded-md bg-green-500' : 'px-3 py-1 text-white rounded-md hover:bg-white/20';
+        renderImitationPhrases();
+    }
+    function addEditNote(note) {
+        const cell = imiPhrase2[5];
+        if (cell.notes[0] === '?') cell.notes[0] = note;
+        else if (cell.type === 'split' && cell.notes[1] === '?') cell.notes[1] = note;
+        else cell.notes = cell.type === 'split' ? [note, '?'] : [note];
+        renderImitationPhrases();
+        playNote(note, 0, 0.2, true);
+    }
+    function playImitation() {
+        playSequence([...imiPhrase1, ...imiPhrase2], [...imiAcc1, ...imiAcc2], 'btn-play-imi', 'imi-note-item');
+    }
+    function swapImitationPhrases() {
+        [imiPhrase1, imiPhrase2] = [imiPhrase2, imiPhrase1];
+        [imiAcc1, imiAcc2] = [imiAcc2, imiAcc1];
+        renderImitationPhrases();
+    }
+
+    // Init
+    window.addEventListener('resize', drawPath);
+    document.getElementById('play-btn').addEventListener('click', () => playSequence(collectedMelody, null, 'play-btn', 'melody-note'));
+    document.getElementById('play-acc-btn').addEventListener('click', () => playSequence(collectedMelody, defaultAccompaniment.slice(0, collectedMelody.length), 'play-acc-btn', 'melody-note'));
+    document.getElementById('reset-btn').addEventListener('click', generateBoard);
+
+    if (window.elementSdk) {
+        window.elementSdk.init({
+            defaultConfig,
+            onConfigChange: (c) => document.getElementById('game-title').textContent = `🎵 ${c.game_title||'旋律創作棋盤'} 🎵`
+        });
+    }
+
+    generateBoard();
+  </script>
+ </body>
+</html>
