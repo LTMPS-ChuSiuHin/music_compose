@@ -3,22 +3,71 @@
  <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>旋律創作棋盤 (模進句版)</title>
+  <title>旋律創作棋盤 (最終完美版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/_sdk/element_sdk.js"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+  
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&amp;family=Fredoka:wght@400;500;600&amp;display=swap" rel="stylesheet">
   <style>
     body { box-sizing: border-box; }
     * { font-family: 'Noto Sans TC', 'Fredoka', sans-serif; }
     
-    .board-cell { transition: all 0.3s ease; z-index: 10; position: relative; }
-    .board-cell:hover { transform: scale(1.05); }
-    .board-cell.visited {
-      box-shadow: 0 0 20px rgba(255, 193, 7, 0.6);
-      border: 2px solid #fff;
-      opacity: 1 !important;
+    /* Dynamic Background */
+    .bg-animate {
+        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+        background-size: 400% 400%;
+        animation: gradientBG 15s ease infinite;
     }
-    .end-cell { background: linear-gradient(135deg, #ec4899 0%, #db2777 100%) !important; }
+    @keyframes gradientBG {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    /* Glassmorphism Utilities */
+    .glass {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    }
+    .glass-dark {
+        background: rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Board & Cells */
+    .board-cell { 
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        z-index: 10; 
+        position: relative; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .board-cell:hover { 
+        transform: translateY(-5px) scale(1.02); 
+        filter: brightness(1.1);
+        z-index: 20;
+    }
+    .board-cell.visited {
+      box-shadow: 0 0 25px rgba(255, 223, 0, 0.6), inset 0 0 10px rgba(255,255,255,0.5);
+      border: 3px solid #fff;
+      opacity: 1 !important;
+      transform: scale(1.02);
+    }
+    .end-cell { 
+        background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%) !important; 
+        animation: pulse-end 2s infinite;
+    }
+    @keyframes pulse-end {
+        0% { box-shadow: 0 0 0 0 rgba(255, 65, 108, 0.7); }
+        70% { box-shadow: 0 0 0 15px rgba(255, 65, 108, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 65, 108, 0); }
+    }
     
     /* Animations */
     @keyframes shake {
@@ -26,18 +75,58 @@
       25% { transform: translateX(-5px); }
       75% { transform: translateX(5px); }
     }
-    .shake { animation: shake 0.3s ease-in-out; }
-    .player-piece { animation: bounce 0.5s ease infinite alternate; }
-    @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-8px); } }
-    .playing { animation: pulse 0.3s ease-in-out; transform: scale(1.1); filter: brightness(1.2); }
-    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
+    .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
     
-    /* Input UI Styles */
-    .note-btn { transition: all 0.2s; }
-    .note-btn:active { transform: scale(0.95); }
+    .player-piece { 
+        animation: bounce-note 0.6s ease infinite alternate; 
+        background: radial-gradient(circle at 30% 30%, #ffd700, #ff8c00);
+    }
+    @keyframes bounce-note { from { transform: translateY(0); } to { transform: translateY(-10px); } }
     
-    /* View Handling */
-    .view-section { transition: opacity 0.3s ease; }
+    /* Audio Sync Animation (Snappy) */
+    .playing { 
+        animation: play-pop 0.3s cubic-bezier(0.1, 0.7, 1.0, 0.1) forwards; 
+        filter: brightness(1.8) drop-shadow(0 0 15px rgba(255, 255, 255, 0.8)) !important;
+        z-index: 50 !important;
+    }
+    @keyframes play-pop { 
+        0% { transform: scale(1); border-color: rgba(255,255,255,0); } 
+        10% { transform: scale(1.25); border-color: rgba(255,255,255,1); } 
+        100% { transform: scale(1); border-color: rgba(255,255,255,0); } 
+    }
+    
+    /* UI Elements */
+    .note-btn { 
+        transition: all 0.1s; 
+        box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+    }
+    .note-btn:active { 
+        transform: translateY(4px); 
+        box-shadow: 0 0 0 rgba(0,0,0,0.2); 
+    }
+    
+    .action-btn {
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .action-btn::after {
+        content: '';
+        position: absolute;
+        top: 0; left: -100%;
+        width: 100%; height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: 0.5s;
+    }
+    .action-btn:hover::after { left: 100%; }
+    .action-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.2); }
+    
+    /* View Transitions */
+    .view-section { animation: fadeInUp 0.5s ease-out; }
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
     .hidden { display: none !important; opacity: 0; }
 
     /* SVG Path */
@@ -46,139 +135,251 @@
       pointer-events: none; z-index: 1;
     }
     .path-line {
-      stroke: rgba(255, 255, 255, 0.6); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round;
-      fill: none; filter: drop-shadow(0 0 4px rgba(255, 193, 7, 0.5)); transition: all 0.3s ease;
+      stroke: rgba(255, 255, 255, 0.8); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round;
+      fill: none; filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6)); 
+      transition: all 0.3s ease;
+      stroke-dasharray: 20;
+      /* Modified animation direction: -1000 moves dashes forward along the path */
+      animation: dash 30s linear infinite;
+    }
+    @keyframes dash { to { stroke-dashoffset: -1000; } }
+
+    /* Scrollbar */
+    .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+
+    /* Note Card Styles */
+    .note-card {
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.3);
+        border: 1px solid rgba(255,255,255,0.1);
     }
   </style>
   <style>@view-transition { navigation: auto; }</style>
   <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
  </head>
- <body class="h-full bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 overflow-auto">
-  <div class="w-full min-h-full p-4 md:p-6">
-   <div class="max-w-4xl mx-auto">
+ <body class="h-full bg-animate overflow-auto text-white selection:bg-pink-500 selection:text-white">
+  <div class="w-full min-h-full p-4 md:p-6 pb-20">
+   <div class="max-w-5xl mx-auto">
     
-    <div class="text-center mb-6">
-     <h1 id="game-title" class="text-3xl md:text-4xl font-bold text-white mb-2 drop-shadow-lg">🎵 旋律創作棋盤 🎵</h1>
-     <p class="text-purple-200 text-sm md:text-base">創作 -> 伴奏 -> 作曲手法 (重複/模仿/模進)</p>
+    <div class="text-center mb-8 relative">
+     <h1 id="game-title" class="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-pink-200 mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">🎵 旋律創作棋盤 🎵</h1>
+     <p class="text-white/90 text-base md:text-lg font-medium bg-black/20 inline-block px-4 py-1 rounded-full backdrop-blur-sm border border-white/10">由起點開始往右或下方走，直到終點</p>
     </div>
 
     <div id="view-game" class="view-section">
-        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 mb-6">
+        <div class="glass rounded-2xl p-5 mb-6">
             <div class="flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-3"><span class="text-white font-medium">步數：</span>
-            <div class="flex gap-1"><span id="step-count" class="text-2xl font-bold text-yellow-300">1</span>
-            </div>
-            </div>
-            <div class="flex gap-2 flex-wrap">
-                <button id="play-btn" class="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2"> <span>▶</span> 播放旋律 </button> 
-                <button id="play-acc-btn" class="hidden px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl font-medium hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg flex items-center gap-2"> <span>🎹</span> 加入伴奏播放 </button> 
-                <button id="technique-btn" class="hidden px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-cyan-700 transition-all shadow-lg flex items-center gap-2"> <span>✨</span> 作曲手法 </button> 
-                <button id="reset-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-xl font-medium hover:from-red-600 hover:to-pink-700 transition-all shadow-lg flex items-center gap-2"> <span>↺</span> 重置 </button>
-            </div>
+                <div class="flex items-center gap-3 bg-black/20 px-4 py-2 rounded-xl border border-white/10">
+                    <span class="text-white font-medium">步數：</span>
+                    <div class="flex gap-1"><span id="step-count" class="text-2xl font-bold text-yellow-300">1</span></div>
+                </div>
+                <div class="flex gap-3 flex-wrap">
+                    <button id="play-btn" class="action-btn px-5 py-2.5 bg-gradient-to-r from-emerald-400 to-teal-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2"> <span>▶</span> 播放旋律 </button> 
+                    <button id="play-acc-btn" class="hidden action-btn px-5 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2"> <span>🎹</span> 加入伴奏播放 </button> 
+                    <button id="technique-btn" class="hidden action-btn px-5 py-2.5 bg-gradient-to-r from-blue-400 to-indigo-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2"> <span>✨</span> 作曲手法 </button> 
+                    <button onclick="openGallery()" class="action-btn px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2"> <span>🏆</span> 作品欣賞 </button>
+                    <button id="reset-btn" class="action-btn px-5 py-2.5 bg-gradient-to-r from-red-400 to-orange-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2"> <span>↺</span> 重置 </button>
+                </div>
             </div>
         </div>
 
-        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 md:p-6 mb-6 relative">
+        <div class="glass rounded-2xl p-6 md:p-8 mb-6 relative overflow-hidden">
+            <div class="absolute inset-0 bg-white/5 pointer-events-none"></div>
             <svg id="path-svg"></svg>
-            <div id="board" class="grid grid-cols-4 gap-3 md:gap-4 relative z-10"></div>
+            <div id="board" class="grid grid-cols-4 gap-4 md:gap-6 relative z-10"></div>
         </div>
 
-        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
-            <h2 class="text-white font-bold text-lg mb-3 flex items-center gap-2"><span>🎼</span> 已收集的旋律</h2>
-            <div id="melody-display" class="flex flex-wrap gap-2 min-h-16 items-center"></div>
+        <div class="glass rounded-2xl p-5 mb-6">
+            <h2 class="text-white font-bold text-lg mb-3 flex items-center gap-2 border-b border-white/20 pb-2"><span>🎼</span> 已收集的旋律</h2>
+            <div id="melody-display" class="flex flex-wrap gap-3 min-h-20 items-center p-2 rounded-xl bg-black/10"></div>
         </div>
         
-        <div class="mt-4 flex flex-wrap justify-center gap-4 text-sm text-white/70">
-            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-green-400 to-emerald-500"></div><span>起點</span></div>
-            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-blue-400 to-cyan-500"></div><span>1拍 (♩)</span></div>
-            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-orange-400 to-amber-500"></div><span>0.5+0.5拍 (♪♪)</span></div>
-            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-gradient-to-r from-pink-500 to-pink-600"></div><span>2拍 (𝅗𝅥)</span></div>
+        <div class="mt-6 flex flex-wrap justify-center gap-6 text-sm font-bold text-white/90">
+            <div class="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg"><div class="w-4 h-4 rounded bg-gradient-to-r from-green-400 to-emerald-500 shadow-sm"></div><span>起點</span></div>
+            <div class="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg"><div class="w-4 h-4 rounded bg-gradient-to-r from-blue-400 to-cyan-500 shadow-sm"></div><span>1拍 (♩)</span></div>
+            <div class="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg"><div class="w-4 h-4 rounded bg-gradient-to-r from-orange-400 to-amber-500 shadow-sm"></div><span>0.5+0.5拍 (♪♪)</span></div>
+            <div class="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg"><div class="w-4 h-4 rounded bg-gradient-to-r from-pink-500 to-pink-600 shadow-sm"></div><span>2拍 (𝅗𝅥)</span></div>
         </div>
     </div>
 
-    <div id="view-technique-menu" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div class="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full shadow-2xl">
-            <h2 class="text-2xl font-bold text-indigo-900 mb-6 text-center">選擇作曲手法</h2>
-            <div class="grid gap-4">
-                <button onclick="selectTechnique('repetition')" class="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold text-lg hover:from-blue-600 hover:to-indigo-700 hover:scale-[1.02] transition-all shadow-md flex items-center justify-between">
-                    <span>🔄 重複句 (Repetition)</span>
-                </button>
-                <button onclick="selectTechnique('imitation')" class="p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl font-bold text-lg hover:from-purple-600 hover:to-pink-700 hover:scale-[1.02] transition-all shadow-md flex items-center justify-between">
-                    <span>🦜 模仿句 (Imitation)</span>
-                </button>
-                <button onclick="selectTechnique('sequence')" class="p-4 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl font-bold text-lg hover:from-teal-600 hover:to-cyan-700 hover:scale-[1.02] transition-all shadow-md flex items-center justify-between">
-                    <span>📈 模進句 (Sequence)</span>
-                    <span class="text-sm opacity-80 bg-white/20 px-2 py-1 rounded">新功能</span>
+    <div id="view-gallery" class="hidden view-section">
+        <div class="glass rounded-2xl p-6 border border-white/20 min-h-[85vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center mb-6 border-b border-white/20 pb-4">
+                <h2 class="text-3xl font-black text-white flex items-center gap-3 drop-shadow-md">
+                    <span class="text-4xl">🏆</span> 作品欣賞
+                </h2>
+                <button onclick="backToGame()" class="px-5 py-2.5 bg-white/10 text-white border border-white/20 rounded-xl hover:bg-white/20 hover:scale-105 transition-all font-bold backdrop-blur-sm">
+                    ↩ 返回遊戲
                 </button>
             </div>
-            <button onclick="closeTechniqueMenu()" class="mt-6 w-full py-2 text-gray-500 hover:text-gray-700 font-medium">返回棋盤</button>
+
+            <div class="glass-dark rounded-xl p-5 mb-6 flex flex-wrap gap-4 items-end shadow-inner">
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-white/80 text-xs uppercase tracking-wider mb-2 font-bold">年級 (Grade)</label>
+                    <div class="relative">
+                        <select id="gallery-grade" class="w-full p-3 rounded-xl bg-white/90 text-indigo-900 font-bold border-2 border-transparent focus:border-pink-400 focus:outline-none appearance-none shadow-sm cursor-pointer hover:bg-white transition">
+                            <option value="1">1年級</option>
+                            <option value="2">2年級</option>
+                            <option value="3">3年級</option>
+                            <option value="4" selected>4年級</option>
+                            <option value="5">5年級</option>
+                            <option value="6">6年級</option>
+                        </select>
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-900 pointer-events-none">▼</div>
+                    </div>
+                </div>
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-white/80 text-xs uppercase tracking-wider mb-2 font-bold">班別 (Class)</label>
+                    <div class="relative">
+                        <select id="gallery-class" class="w-full p-3 rounded-xl bg-white/90 text-indigo-900 font-bold border-2 border-transparent focus:border-pink-400 focus:outline-none appearance-none shadow-sm cursor-pointer hover:bg-white transition">
+                            <option value="A" selected>A 班</option>
+                            <option value="B">B 班</option>
+                            <option value="C">C 班</option>
+                            <option value="D">D 班</option>
+                            <option value="E">E 班</option>
+                        </select>
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-900 pointer-events-none">▼</div>
+                    </div>
+                </div>
+                <div class="flex-1 min-w-[160px]">
+                    <label class="block text-white/80 text-xs uppercase tracking-wider mb-2 font-bold">排序 (Sort)</label>
+                    <div class="relative">
+                        <select id="gallery-sort" onchange="sortGalleryData()" class="w-full p-3 rounded-xl bg-white/90 text-indigo-900 font-bold border-2 border-transparent focus:border-pink-400 focus:outline-none appearance-none shadow-sm cursor-pointer hover:bg-white transition">
+                            <option value="number">🔢 按學號</option>
+                            <option value="time">🕒 按時序 (最新)</option>
+                        </select>
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-900 pointer-events-none">▼</div>
+                    </div>
+                </div>
+                
+                <button onclick="toggleAllGalleryAnswers()" id="btn-toggle-answers" class="action-btn px-5 py-3 bg-indigo-600/80 text-white rounded-xl font-bold hover:bg-indigo-600 shadow-md flex items-center gap-2 border border-white/20 backdrop-blur-sm">
+                    <span>👁️</span> 答案
+                </button>
+                <button onclick="fetchGalleryData()" class="action-btn px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-xl font-bold hover:from-pink-600 hover:to-rose-700 shadow-lg flex items-center gap-2">
+                    <span>🔍</span> 搜尋
+                </button>
+            </div>
+
+            <div id="gallery-results" class="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-2 p-2">
+                <div class="flex flex-col items-center justify-center h-64 text-white/60">
+                    <div class="text-6xl mb-4 opacity-50">🎵</div>
+                    <div class="text-xl font-medium">請選擇年級和班別進行搜尋</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-technique-menu" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 view-section">
+        <div class="glass rounded-2xl p-8 max-w-lg w-full shadow-[0_20px_50px_rgba(0,0,0,0.5)] transform transition-all scale-100">
+            <h2 class="text-3xl font-black text-white mb-8 text-center drop-shadow-lg">選擇作曲手法</h2>
+            <div class="grid gap-5">
+                <button onclick="selectTechnique('repetition')" class="group p-5 bg-gradient-to-r from-blue-500/90 to-indigo-600/90 text-white rounded-2xl font-bold text-xl hover:from-blue-500 hover:to-indigo-600 hover:scale-[1.02] transition-all shadow-lg flex items-center justify-between border border-white/20">
+                    <span class="group-hover:translate-x-2 transition-transform">🔄 重複句 (Repetition)</span>
+                    <span class="opacity-0 group-hover:opacity-100 transition-opacity">➜</span>
+                </button>
+                <button onclick="selectTechnique('imitation')" class="group p-5 bg-gradient-to-r from-purple-500/90 to-pink-600/90 text-white rounded-2xl font-bold text-xl hover:from-purple-500 hover:to-pink-600 hover:scale-[1.02] transition-all shadow-lg flex items-center justify-between border border-white/20">
+                    <span class="group-hover:translate-x-2 transition-transform">🦜 模仿句 (Imitation)</span>
+                    <span class="opacity-0 group-hover:opacity-100 transition-opacity">➜</span>
+                </button>
+                <button onclick="selectTechnique('sequence')" class="group p-5 bg-gradient-to-r from-teal-500/90 to-cyan-600/90 text-white rounded-2xl font-bold text-xl hover:from-teal-500 hover:to-cyan-600 hover:scale-[1.02] transition-all shadow-lg flex items-center justify-between border border-white/20">
+                    <span class="group-hover:translate-x-2 transition-transform">📈 模進句 (Sequence)</span>
+                    <span class="opacity-0 group-hover:opacity-100 transition-opacity">➜</span>
+                </button>
+            </div>
+            <button onclick="closeTechniqueMenu()" class="mt-8 w-full py-3 text-white/70 hover:text-white font-medium hover:bg-white/10 rounded-xl transition-colors">返回棋盤</button>
         </div>
     </div>
 
     <div id="view-repetition" class="hidden view-section">
-        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-white">🔄 重複句 (Repetition)</h2>
-                <div class="flex gap-2">
-                    <button onclick="playRepetition()" id="btn-play-rep" class="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2">
+        <div class="glass rounded-2xl p-6 md:p-8 mb-6 border border-white/20">
+            <div class="flex flex-wrap justify-between items-center mb-8 gap-4 border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-black text-white drop-shadow-md">🔄 重複句 (Repetition)</h2>
+                <div class="flex gap-3">
+                    <button onclick="playRepetition()" id="btn-play-rep" class="action-btn px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2">
                         <span>▶</span> 播放
                     </button>
-                    <button onclick="backToGame()" class="px-4 py-2 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all">返回</button>
+                    <button onclick="triggerUpload('repetition')" class="action-btn px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2">
+                        <span>☁️</span> 上載作品
+                    </button>
+                    <button onclick="backToGame()" class="px-5 py-2.5 bg-white/10 text-white border border-white/20 rounded-xl hover:bg-white/20 transition-all font-bold">返回</button>
                 </div>
             </div>
-            <div class="space-y-6">
-                <div class="bg-black/20 rounded-xl p-4">
-                    <div class="text-purple-300 font-bold mb-2 text-sm uppercase">第一句</div>
-                    <div id="rep-phrase-1" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
+            <div class="space-y-8">
+                <div class="glass-dark rounded-2xl p-6 relative overflow-hidden group">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
+                    <div class="text-purple-300 font-bold mb-4 text-sm uppercase tracking-wider flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-xs">1</span> 第一句
+                    </div>
+                    <div id="rep-phrase-1" class="flex flex-wrap gap-3 items-center min-h-[4rem]"></div>
                 </div>
-                <div class="bg-black/20 rounded-xl p-4">
-                    <div class="text-yellow-300 font-bold mb-2 text-sm uppercase">第二句 (完全重複)</div>
-                    <div id="rep-phrase-2" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
+                <div class="glass-dark rounded-2xl p-6 relative overflow-hidden group">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-yellow-400"></div>
+                    <div class="text-yellow-300 font-bold mb-4 text-sm uppercase tracking-wider flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-yellow-500/20 flex items-center justify-center text-xs">2</span> 第二句 (完全重複)
+                    </div>
+                    <div id="rep-phrase-2" class="flex flex-wrap gap-3 items-center min-h-[4rem]"></div>
                 </div>
             </div>
         </div>
     </div>
 
     <div id="view-imitation" class="hidden view-section">
-        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
-            <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
-                <h2 class="text-2xl font-bold text-white">🦜 模仿句 (Imitation)</h2>
-                <div class="flex gap-2">
-                    <button onclick="playImitation()" id="btn-play-imi" class="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2">
+        <div class="glass rounded-2xl p-6 md:p-8 mb-6 border border-white/20">
+            <div class="flex flex-wrap justify-between items-center mb-8 gap-4 border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-black text-white drop-shadow-md">🦜 模仿句 (Imitation)</h2>
+                <div class="flex gap-3">
+                    <button onclick="playImitation()" id="btn-play-imi" class="action-btn px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2">
                         <span>▶</span> 播放
                     </button>
-                    <button onclick="swapImitationPhrases()" class="px-5 py-2 bg-gradient-to-r from-orange-400 to-pink-500 text-white rounded-xl font-bold hover:from-orange-500 hover:to-pink-600 transition-all shadow-lg flex items-center gap-2">
+                    <button onclick="swapImitationPhrases()" class="action-btn px-6 py-2.5 bg-gradient-to-r from-orange-400 to-pink-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2">
                         <span>⇄</span> 交換
                     </button>
-                    <button onclick="backToGame()" class="px-4 py-2 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all">返回</button>
+                     <button onclick="triggerUpload('imitation')" class="action-btn px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2">
+                        <span>☁️</span> 上載作品
+                    </button>
+                    <button onclick="backToGame()" class="px-5 py-2.5 bg-white/10 text-white border border-white/20 rounded-xl hover:bg-white/20 transition-all font-bold">返回</button>
                 </div>
             </div>
 
-            <div class="space-y-6">
-                <div class="bg-black/20 rounded-xl p-4 relative">
-                    <div class="text-purple-300 font-bold mb-2 text-sm uppercase">第一句</div>
-                    <div id="imi-phrase-1" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
+            <div class="space-y-8">
+                <div id="imi-container-1" class="glass-dark rounded-2xl p-6 relative transition-all duration-300">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
+                    <div class="text-purple-300 font-bold mb-4 text-sm uppercase tracking-wider flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-xs">1</span> 第一句
+                    </div>
+                    <div id="imi-phrase-1" class="flex flex-wrap gap-3 items-center min-h-[4rem]"></div>
                 </div>
-                <div class="bg-black/20 rounded-xl p-4">
-                    <div class="text-yellow-300 font-bold mb-2 text-sm uppercase">第二句 (第6格輸入, 第7格變奏)</div>
-                    <div id="imi-phrase-2" class="flex flex-wrap gap-2 items-center min-h-[4rem]"></div>
-                    <div id="imi-editor" class="mt-4 p-4 bg-white/10 rounded-lg border border-white/10">
-                        <div class="text-white font-bold mb-2">第六格編輯區：</div>
-                        <div class="flex flex-wrap gap-4 items-center">
-                            <div class="flex bg-black/30 rounded-lg p-1">
-                                <button onclick="setEditRhythm('1')" id="rhythm-ta" class="px-3 py-1 text-white rounded-md bg-green-500">♩ Ta</button>
-                                <button onclick="setEditRhythm('split')" id="rhythm-titi" class="px-3 py-1 text-white rounded-md">♪♪ Ti-Ti</button>
-                            </div>
-                            <div class="flex flex-wrap gap-1">
-                                <button onclick="addEditNote('d')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">d</button>
-                                <button onclick="addEditNote('r')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">r</button>
-                                <button onclick="addEditNote('m')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">m</button>
-                                <button onclick="addEditNote('f')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">f</button>
-                                <button onclick="addEditNote('s')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">s</button>
-                                <button onclick="addEditNote('l')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">l</button>
-                                <button onclick="addEditNote('t')" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">t</button>
-                                <button onclick="addEditNote(`d'`)" class="note-btn px-2 py-1 bg-white text-indigo-900 rounded font-bold">d'</button>
-                            </div>
+                
+                <div id="imi-container-2" class="glass-dark rounded-2xl p-6 relative transition-all duration-300">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-yellow-400"></div>
+                    <div class="text-yellow-300 font-bold mb-4 text-sm uppercase tracking-wider flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-yellow-500/20 flex items-center justify-center text-xs">2</span> 第二句
+                    </div>
+                    <div id="imi-phrase-2" class="flex flex-wrap gap-3 items-center min-h-[4rem]"></div>
+                </div>
+                
+                <div id="imi-editor" class="mt-6 p-6 bg-indigo-900/40 rounded-2xl border border-indigo-500/30 hidden shadow-xl backdrop-blur-sm">
+                    <div class="text-white font-bold mb-4 flex items-center gap-2 text-lg">
+                        <span class="text-2xl">✏️</span> 第六格編輯區：
+                    </div>
+                    <div class="flex flex-wrap gap-6 items-center">
+                        <div class="flex bg-black/40 rounded-xl p-1.5 shadow-inner">
+                            <button onclick="setEditRhythm('1')" id="rhythm-ta" class="px-4 py-2 text-white rounded-lg bg-green-500 font-bold shadow transition-all hover:scale-105">♩ Ta</button>
+                            <button onclick="setEditRhythm('split')" id="rhythm-titi" class="px-4 py-2 text-white rounded-lg font-bold transition-all hover:bg-white/10">♪♪ Ti-Ti</button>
+                        </div>
+                        <div class="h-8 w-px bg-white/20"></div>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="addEditNote('d')" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">d</button>
+                            <button onclick="addEditNote('r')" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">r</button>
+                            <button onclick="addEditNote('m')" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">m</button>
+                            <button onclick="addEditNote('f')" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">f</button>
+                            <button onclick="addEditNote('s')" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">s</button>
+                            <button onclick="addEditNote('l')" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">l</button>
+                            <button onclick="addEditNote('t')" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">t</button>
+                            <button onclick="addEditNote(`d'`)" class="note-btn px-3 py-2 bg-gradient-to-b from-white to-gray-200 text-indigo-900 rounded-lg font-black border-b-4 border-gray-300">d'</button>
                         </div>
                     </div>
                 </div>
@@ -187,57 +388,102 @@
     </div>
 
     <div id="view-sequence" class="hidden view-section">
-        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
-            <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
-                <h2 class="text-2xl font-bold text-white">📈 模進句 (Sequence)</h2>
-                <div class="flex gap-2">
-                    <button onclick="playSequenceMode()" id="btn-play-seq" class="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg flex items-center gap-2">
+        <div class="glass rounded-2xl p-6 md:p-8 mb-6 border border-white/20">
+            <div class="flex flex-wrap justify-between items-center mb-8 gap-4 border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-black text-white drop-shadow-md">📈 模進句 (Sequence)</h2>
+                <div class="flex gap-3">
+                    <button onclick="playSequenceMode()" id="btn-play-seq" class="action-btn px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2">
                         <span>▶</span> 播放模進樂段
                     </button>
-                    <button onclick="backToGame()" class="px-4 py-2 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all">返回</button>
+                     <button onclick="triggerUpload('sequence')" class="action-btn px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2">
+                        <span>☁️</span> 上載作品
+                    </button>
+                    <button onclick="backToGame()" class="px-5 py-2.5 bg-white/10 text-white border border-white/20 rounded-xl hover:bg-white/20 transition-all font-bold">返回</button>
                 </div>
             </div>
 
-            <div class="mb-6 p-4 bg-white/10 rounded-xl">
-                <p class="text-white mb-3 font-bold">請選擇模進形式 (填入第二、三句)：</p>
-                <div class="flex flex-wrap gap-2">
-                    <button onclick="generateSequence('up2')" class="seq-opt-btn px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition shadow">↗ 上行二度 (+1)</button>
-                    <button onclick="generateSequence('up3')" class="seq-opt-btn px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition shadow">↗↗ 上行三度 (+2)</button>
-                    <button onclick="generateSequence('down2')" class="seq-opt-btn px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition shadow">↘ 下行二度 (-1)</button>
-                    <button onclick="generateSequence('down3')" class="seq-opt-btn px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition shadow">↘↘ 下行三度 (-2)</button>
+            <div class="mb-8 p-6 glass-dark rounded-2xl border border-white/10 shadow-lg">
+                <p class="text-white mb-4 font-bold flex items-center gap-2 text-lg"><span class="text-2xl">⚡</span> 請選擇模進形式 (填入第二、三句)：</p>
+                <div class="flex flex-wrap gap-3">
+                    <button onclick="generateSequence('up2')" class="action-btn px-5 py-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl font-bold shadow-md">↗ 上行二度 (+1)</button>
+                    <button onclick="generateSequence('up3')" class="action-btn px-5 py-3 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-xl font-bold shadow-md">↗↗ 上行三度 (+2)</button>
+                    <button onclick="generateSequence('down2')" class="action-btn px-5 py-3 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-xl font-bold shadow-md">↘ 下行二度 (-1)</button>
+                    <button onclick="generateSequence('down3')" class="action-btn px-5 py-3 bg-gradient-to-br from-red-500 to-red-600 text-white rounded-xl font-bold shadow-md">↘↘ 下行三度 (-2)</button>
                 </div>
             </div>
 
             <div class="space-y-4">
-                <div class="bg-black/20 rounded-xl p-3 border-l-4 border-purple-400">
-                    <div class="text-purple-300 font-bold text-xs uppercase mb-1">第一句 (第1-4格)</div>
-                    <div id="seq-phrase-1" class="flex flex-wrap gap-2 items-center min-h-[3rem]"></div>
+                <div class="glass-dark rounded-xl p-4 border-l-4 border-purple-400 relative">
+                    <div class="text-purple-300 font-bold text-xs uppercase mb-2">第一句 (第1-4格)</div>
+                    <div id="seq-phrase-1" class="flex flex-wrap gap-3 items-center min-h-[3rem]"></div>
                 </div>
 
-                <div class="bg-black/30 rounded-xl p-3 border-l-4 border-yellow-400">
-                    <div class="text-yellow-300 font-bold text-xs uppercase mb-1 flex justify-between">
+                <div class="glass-dark rounded-xl p-4 border-l-4 border-yellow-400 relative bg-yellow-500/10">
+                    <div class="text-yellow-300 font-bold text-xs uppercase mb-2 flex justify-between">
                         <span>第二句 (模進)</span>
-                        <span id="seq-lbl-2" class="opacity-70">等待選擇...</span>
+                        <span id="seq-lbl-2" class="opacity-70 bg-black/30 px-2 rounded">等待選擇...</span>
                     </div>
-                    <div id="seq-phrase-2" class="flex flex-wrap gap-2 items-center min-h-[3rem]">
+                    <div id="seq-phrase-2" class="flex flex-wrap gap-3 items-center min-h-[3rem]">
                         <span class="text-white/30 italic text-sm">請選擇上方模進形式</span>
                     </div>
                 </div>
 
-                <div class="bg-black/30 rounded-xl p-3 border-l-4 border-yellow-400">
-                    <div class="text-yellow-300 font-bold text-xs uppercase mb-1 flex justify-between">
+                <div class="glass-dark rounded-xl p-4 border-l-4 border-yellow-400 relative bg-yellow-500/5">
+                    <div class="text-yellow-300 font-bold text-xs uppercase mb-2 flex justify-between">
                         <span>第三句 (模進)</span>
-                        <span id="seq-lbl-3" class="opacity-70">等待選擇...</span>
+                        <span id="seq-lbl-3" class="opacity-70 bg-black/30 px-2 rounded">等待選擇...</span>
                     </div>
-                    <div id="seq-phrase-3" class="flex flex-wrap gap-2 items-center min-h-[3rem]">
+                    <div id="seq-phrase-3" class="flex flex-wrap gap-3 items-center min-h-[3rem]">
                         <span class="text-white/30 italic text-sm">請選擇上方模進形式</span>
                     </div>
                 </div>
 
-                <div class="bg-black/20 rounded-xl p-3 border-l-4 border-pink-400">
-                    <div class="text-pink-300 font-bold text-xs uppercase mb-1">第四句 (第5-7格)</div>
-                    <div id="seq-phrase-4" class="flex flex-wrap gap-2 items-center min-h-[3rem]"></div>
+                <div class="glass-dark rounded-xl p-4 border-l-4 border-pink-400 relative">
+                    <div class="text-pink-300 font-bold text-xs uppercase mb-2">第四句 (第5-7格)</div>
+                    <div id="seq-phrase-4" class="flex flex-wrap gap-3 items-center min-h-[3rem]"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="upload-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 view-section">
+        <div class="glass rounded-2xl p-8 max-w-md w-full shadow-2xl transform transition-all border border-white/20 bg-indigo-900/90">
+            <h3 class="text-3xl font-bold text-white mb-2 text-center">☁️ 上載作品</h3>
+            <p class="text-indigo-200 mb-8 text-sm text-center">請輸入您的資料以提交旋律</p>
+            
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-bold text-white/80 mb-2">年級 (Grade)</label>
+                    <select id="input-grade" class="w-full p-3 rounded-xl bg-white/10 text-white font-bold border border-white/20 focus:ring-2 focus:ring-pink-500 focus:bg-white/20 outline-none">
+                        <option value="1" class="text-indigo-900">1年級</option>
+                        <option value="2" class="text-indigo-900">2年級</option>
+                        <option value="3" class="text-indigo-900">3年級</option>
+                        <option value="4" selected class="text-indigo-900">4年級</option>
+                        <option value="5" class="text-indigo-900">5年級</option>
+                        <option value="6" class="text-indigo-900">6年級</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold text-white/80 mb-2">班別 (Class)</label>
+                    <select id="input-class" class="w-full p-3 rounded-xl bg-white/10 text-white font-bold border border-white/20 focus:ring-2 focus:ring-pink-500 focus:bg-white/20 outline-none">
+                        <option value="A" selected class="text-indigo-900">A 班</option>
+                        <option value="B" class="text-indigo-900">B 班</option>
+                        <option value="C" class="text-indigo-900">C 班</option>
+                        <option value="D" class="text-indigo-900">D 班</option>
+                        <option value="E" class="text-indigo-900">E 班</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold text-white/80 mb-2">學號 (Student ID)</label>
+                    <input type="number" id="input-number" min="0" max="40" placeholder="0-40" class="w-full p-3 rounded-xl bg-white/10 text-white font-bold border border-white/20 focus:ring-2 focus:ring-pink-500 focus:bg-white/20 outline-none placeholder-white/30">
+                </div>
+            </div>
+
+            <div class="flex gap-4 mt-10">
+                <button onclick="closeUploadModal()" class="flex-1 py-3 bg-white/10 text-white rounded-xl font-bold hover:bg-white/20 transition">取消</button>
+                <button onclick="confirmUpload()" id="btn-confirm-upload" class="flex-1 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:from-blue-600 hover:to-indigo-700 transition shadow-lg">確認上載</button>
             </div>
         </div>
     </div>
@@ -246,11 +492,21 @@
   </div>
 
   <script>
-    // --- Configuration & Data ---
-    const defaultConfig = { game_title: '旋律創作棋盤' };
+    // --- Firebase Config ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyCZPMIqokao_MYY2A2QRD2qyhs5nnZmMPY",
+      authDomain: "ltmps-p4-music-compose.firebaseapp.com",
+      projectId: "ltmps-p4-music-compose",
+      storageBucket: "ltmps-p4-music-compose.firebasestorage.app",
+      messagingSenderId: "934696943983",
+      appId: "1:934696943983:web:bfc9d827185cbdb481689a"
+    };
 
-    // Expanded Scale Array for Transposition
-    // Covers range from d,, (Low Low) to s'' (High High) to prevent index errors
+    try { firebase.initializeApp(firebaseConfig); } catch (e) { console.error("Firebase Init Error:", e); }
+    let db;
+    try { db = firebase.firestore(); } catch (e) { console.error("Firestore Init Error:", e); }
+    
+    // --- Data ---
     const scaleArray = [
         'd,,', 'r,,', 'm,,', 'f,,', 's,,', 'l,,', 't,,', 
         'd,', 'r,', 'm,', 'f,', 's,', 'l,', 't,', 
@@ -259,7 +515,6 @@
         "d''", "r''", "m''", "f''", "s''" 
     ];
 
-    // Frequencies mapped to all scale notes
     const noteFrequencies = {
       'd,,': 65.41, 'r,,': 73.42, 'm,,': 82.41, 'f,,': 87.31, 's,,': 98.00, 'l,,': 110.00, 't,,': 123.47,
       'd,': 130.81, 'r,': 146.83, 'm,': 164.81, 'f,': 174.61, 's,': 196.00, 'l,': 220.00, 't,': 246.94,
@@ -268,7 +523,6 @@
       "d''": 1046.50, "r''": 1174.66, "m''": 1318.51, "f''": 1396.91, "s''": 1567.98
     };
 
-    // Original Accompaniment Pattern
     const defaultAccompaniment = [
         [{n:'d,,', d:0.5}, {n:'s,,', d:0.5}], // 1
         [{n:'d,', d:1.0}], // 2
@@ -279,7 +533,6 @@
         [{n:'d,,', d:0.5}, {n:'s,,', d:0.5}, {n:'d,', d:1.0}] // 7 (End)
     ];
     
-    // Grid Data
     const gridData = [
         { notes: ['d'], type: 'start', label: '起點' }, { notes: ['r'], type: 'normal' },
         { notes: ['m', 's'], type: 'split' }, { notes: ['s'], type: 'normal' },
@@ -295,17 +548,19 @@
     let collectedMelody = [];
     let visitedCells = []; 
     let audioContext = null;
-
-    // Sequence State
+    let animationFrameId = null; // Sync loop ID
     let seqP1 = [], seqP2 = [], seqP3 = [], seqP4 = [];
     let seqAcc1 = [], seqAcc2 = [], seqAcc3 = [], seqAcc4 = [];
-
-    // Imitation State
     let imiPhrase1 = [], imiPhrase2 = [];
     let imiAcc1 = [], imiAcc2 = [];
     let currentEditRhythm = '1';
+    let currentTechniqueForUpload = '';
+    
+    // Gallery State
+    let galleryData = [];
+    let showTechniqueAnswers = false;
 
-    // --- Core Game Functions ---
+    // --- Core Functions ---
     function generateBoard() {
       const board = document.getElementById('board');
       board.innerHTML = '';
@@ -321,12 +576,12 @@
                       data.type === 'end' ? 'end-cell' : 'bg-gradient-to-br from-blue-400 to-cyan-500';
         let icon = data.type === 'split' ? '♪♪' : data.type === 'end' ? '𝅗𝅥' : '♩';
         
-        cell.className = `board-cell ${bgClass} rounded-xl p-2 cursor-pointer flex flex-col items-center justify-center min-h-24 opacity-70 hover:opacity-100`;
+        cell.className = `board-cell ${bgClass} rounded-xl p-2 cursor-pointer flex flex-col items-center justify-center min-h-24 opacity-80`;
         cell.id = `cell-${index}`;
         cell.innerHTML = `
-          <div class="text-2xl font-bold text-white flex gap-1">${data.notes.join(' ')}</div>
-          <div class="text-xs text-white/80 mt-1 font-bold">${data.label || icon}</div>
-          <div id="player-${index}" class="hidden mt-1 w-6 h-6 rounded-full bg-yellow-400 flex items-center justify-center text-xs shadow-lg player-piece">♪</div>
+          <div class="text-3xl font-black text-white flex gap-1 drop-shadow-md">${data.notes.join(' ')}</div>
+          <div class="text-xs text-white/90 mt-2 font-bold bg-black/20 px-2 py-0.5 rounded-full">${data.label || icon}</div>
+          <div id="player-${index}" class="hidden mt-2 w-8 h-8 rounded-full flex items-center justify-center text-white text-lg shadow-lg player-piece border-2 border-white">♪</div>
         `;
         cell.addEventListener('click', () => handleCellClick(index));
         board.appendChild(cell);
@@ -349,7 +604,7 @@
             toRemove.forEach(idx => {
                 const c = document.getElementById(`cell-${idx}`);
                 c.classList.remove('visited', 'opacity-100');
-                c.classList.add('opacity-70');
+                c.classList.add('opacity-80');
                 document.getElementById(`player-${idx}`).classList.add('hidden');
             });
             visitedCells = visitedCells.slice(0, visitedPos + 1);
@@ -371,7 +626,7 @@
         if (!isValidMove(lastIndex, index)) {
             const cell = document.getElementById(`cell-${index}`);
             cell.classList.add('shake');
-            setTimeout(() => cell.classList.remove('shake'), 300);
+            setTimeout(() => cell.classList.remove('shake'), 400);
             return;
         }
 
@@ -388,7 +643,7 @@
     function updateVisuals(index) {
         const cell = document.getElementById(`cell-${index}`);
         cell.classList.add('visited');
-        cell.classList.remove('opacity-70');
+        cell.classList.remove('opacity-80');
         document.querySelectorAll('.player-piece').forEach(el => el.classList.add('hidden'));
         document.getElementById(`player-${index}`).classList.remove('hidden');
     }
@@ -409,7 +664,10 @@
         let freq = noteFrequencies[note] || 261.63;
         if (shiftOctave) freq *= 2;
         osc.frequency.value = freq;
+        
+        // Use exact absolute time from AudioContext
         const now = audioContext.currentTime + startTime;
+        
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
         gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
@@ -418,7 +676,8 @@
     }
 
     function playCellSound(data) {
-        if (data.type === 'split') {
+        // Fix for Editing Cell Type: Check if it's editing but has split notes
+        if (data.type === 'split' || (data.type === 'editing' && data.notes.length > 1)) {
             playNote(data.notes[0], 0, 0.2, true);
             playNote(data.notes[1], 0.25, 0.2, true);
         } else {
@@ -426,140 +685,498 @@
         }
     }
 
-    async function playSequence(melody, accArray, buttonId, noteClassPrefix) {
+    // --- Audio Clock Synced Playback ---
+    function playSequence(melody, accArray, buttonId, noteClassPrefix) {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
         const playBtn = document.getElementById(buttonId);
-        const originalText = playBtn.innerHTML;
-        playBtn.disabled = true;
-        playBtn.innerHTML = '<span>🎵</span> ...';
+        let originalText = '';
+        if(playBtn) {
+             originalText = playBtn.innerHTML;
+             playBtn.disabled = true;
+             playBtn.innerHTML = '<span>🎵</span> 播放中...';
+        }
 
-        let currentTime = 0;
+        // Clean up previous run
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            document.querySelectorAll('.playing').forEach(el => el.classList.remove('playing'));
+        }
+
         const beatDuration = 0.6; 
+        const startDelay = 0.1;
+        const startTime = audioContext.currentTime + startDelay; // Absolute Start Time
+        
+        let visualQueue = [];
+        let accumulatedTime = 0;
 
+        // Schedule Audio & Visuals
         melody.forEach((item, index) => {
-            const stepStart = currentTime;
+            const stepStartAbs = startTime + accumulatedTime; 
             let stepDur = item.duration === 2 ? beatDuration * 2 : beatDuration;
 
-            setTimeout(() => {
-                const els = document.querySelectorAll(`.${noteClassPrefix}-item`);
-                if(els[index]) {
-                    els[index].classList.add('playing');
-                    setTimeout(() => els[index].classList.remove('playing'), 200);
-                }
-            }, stepStart * 1000);
-
-            // Melody
-            if (item.type === 'split') {
-                playNote(item.notes[0], stepStart, beatDuration*0.5, true);
-                if(item.notes[1]) playNote(item.notes[1], stepStart + beatDuration*0.5, beatDuration*0.5, true);
+            // 1. Audio
+            if (item.type === 'split' || (item.notes && item.notes.length > 1)) {
+                // Determine absolute start for notes, convert to relative offset from NOW for playNote
+                // Since playNote takes (offset), we pass (TargetTime - CurrentTime)
+                playNote(item.notes[0], (stepStartAbs - audioContext.currentTime), beatDuration*0.5, true);
+                playNote(item.notes[1], (stepStartAbs + beatDuration*0.5 - audioContext.currentTime), beatDuration*0.5, true);
             } else {
-                playNote(item.notes[0], stepStart, stepDur, true);
+                playNote(item.notes[0], (stepStartAbs - audioContext.currentTime), stepDur, true);
             }
 
             // Accompaniment
             if (accArray && accArray[index]) {
                 let accOffset = 0;
                 accArray[index].forEach(n => {
-                    playNote(n.n, stepStart + accOffset, n.d * beatDuration, true);
+                    playNote(n.n, (stepStartAbs + accOffset - audioContext.currentTime), n.d * beatDuration, true);
                     accOffset += n.d * beatDuration;
                 });
             }
-            currentTime += stepDur;
+
+            // 2. Visual Queue
+            visualQueue.push({
+                triggerTime: stepStartAbs,
+                index: index
+            });
+
+            accumulatedTime += stepDur;
         });
 
-        setTimeout(() => {
-            playBtn.disabled = false;
-            playBtn.innerHTML = originalText;
-        }, currentTime * 1000 + 200);
+        // Loop for Visuals
+        function syncVisuals() {
+            const now = audioContext.currentTime;
+
+            while (visualQueue.length > 0 && now >= visualQueue[0].triggerTime) {
+                const event = visualQueue.shift();
+                const els = document.querySelectorAll(`.${noteClassPrefix}`);
+                if(els[event.index]) {
+                    els[event.index].classList.remove('playing');
+                    void els[event.index].offsetWidth; // Reflow for restart
+                    els[event.index].classList.add('playing');
+                    
+                    // Cleanup CSS class later
+                    setTimeout(() => {
+                        if(els[event.index]) els[event.index].classList.remove('playing');
+                    }, 350); 
+                }
+            }
+
+            if (now < startTime + accumulatedTime + 0.5) {
+                animationFrameId = requestAnimationFrame(syncVisuals);
+            } else {
+                if(playBtn) {
+                    playBtn.disabled = false;
+                    playBtn.innerHTML = originalText;
+                }
+                animationFrameId = null;
+            }
+        }
+
+        animationFrameId = requestAnimationFrame(syncVisuals);
     }
 
-    // --- Transposition Logic ---
-    function getNoteIndex(note) {
-        return scaleArray.indexOf(note);
-    }
-
+    function getNoteIndex(note) { return scaleArray.indexOf(note); }
     function transposeNote(note, steps) {
         const idx = getNoteIndex(note);
-        if (idx === -1) return note; // Fallback
+        if (idx === -1) return note; 
         const newIdx = Math.max(0, Math.min(scaleArray.length - 1, idx + steps));
         return scaleArray[newIdx];
     }
-
     function transposePhrase(phrase, acc, steps) {
-        // Transpose Melody
         const newPhrase = phrase.map(cell => {
             const newNotes = cell.notes.map(n => transposeNote(n, steps));
             return { ...cell, notes: newNotes };
         });
-        
-        // Transpose Accompaniment
         const newAcc = acc.map(stepPattern => {
             return stepPattern.map(n => ({ ...n, n: transposeNote(n.n, steps) }));
         });
-
         return { melody: newPhrase, acc: newAcc };
     }
 
-    // --- Sequence View Logic ---
+    // --- Technique Logic ---
     function setupSequenceView() {
-        // Define phrases
-        // Phrase 1: Indices 0, 1, 2, 3
         seqP1 = collectedMelody.slice(0, 4);
         seqAcc1 = defaultAccompaniment.slice(0, 4);
-        
-        // Phrase 4: Indices 4, 5, 6, 7 (Rest of collected)
         seqP4 = collectedMelody.slice(4);
         seqAcc4 = defaultAccompaniment.slice(4);
-
-        // Reset generated
-        seqP2 = []; seqP3 = [];
-        seqAcc2 = []; seqAcc3 = [];
-
-        // Render Fixed parts
-        document.getElementById('seq-phrase-1').innerHTML = seqP1.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
-        document.getElementById('seq-phrase-4').innerHTML = seqP4.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
-        
-        // Clear generated UI
+        seqP2 = []; seqP3 = []; seqAcc2 = []; seqAcc3 = [];
+        document.getElementById('seq-phrase-1').innerHTML = seqP1.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50 text-xl font-bold">→</span>');
+        document.getElementById('seq-phrase-4').innerHTML = seqP4.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50 text-xl font-bold">→</span>');
         document.getElementById('seq-phrase-2').innerHTML = '<span class="text-white/30 italic text-sm">請選擇上方模進形式</span>';
         document.getElementById('seq-phrase-3').innerHTML = '<span class="text-white/30 italic text-sm">請選擇上方模進形式</span>';
-
         switchView('sequence');
     }
-
     function generateSequence(type) {
-        let step = 0;
-        let label = '';
+        let step = 0, label = '';
         if (type === 'up2') { step = 1; label = '+1 (上行二度)'; }
         else if (type === 'up3') { step = 2; label = '+2 (上行三度)'; }
         else if (type === 'down2') { step = -1; label = '-1 (下行二度)'; }
         else if (type === 'down3') { step = -2; label = '-2 (下行三度)'; }
-
-        // Generate P2 from P1
         const res2 = transposePhrase(seqP1, seqAcc1, step);
-        seqP2 = res2.melody;
-        seqAcc2 = res2.acc;
-
-        // Generate P3 from P2 (Cumulative sequence)
+        seqP2 = res2.melody; seqAcc2 = res2.acc;
         const res3 = transposePhrase(seqP2, seqAcc2, step);
-        seqP3 = res3.melody;
-        seqAcc3 = res3.acc;
-
-        // Render
+        seqP3 = res3.melody; seqAcc3 = res3.acc;
         document.getElementById('seq-lbl-2').textContent = label;
         document.getElementById('seq-lbl-3').textContent = label + " (再模進)";
-        document.getElementById('seq-phrase-2').innerHTML = seqP2.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
-        document.getElementById('seq-phrase-3').innerHTML = seqP3.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50">→</span>');
+        document.getElementById('seq-phrase-2').innerHTML = seqP2.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50 text-xl font-bold">→</span>');
+        document.getElementById('seq-phrase-3').innerHTML = seqP3.map(i => createNoteHTML(i, 'seq-note-item')).join('<span class="text-white/50 text-xl font-bold">→</span>');
     }
-
     function playSequenceMode() {
         if (seqP2.length === 0) { alert('請先選擇模進形式'); return; }
-        
         const fullMelody = [...seqP1, ...seqP2, ...seqP3, ...seqP4];
         const fullAcc = [...seqAcc1, ...seqAcc2, ...seqAcc3, ...seqAcc4];
-        
         playSequence(fullMelody, fullAcc, 'btn-play-seq', 'seq-note-item');
     }
+    function setupRepetition() {
+        document.getElementById('rep-phrase-1').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'rep-note-item')).join('<span class="text-white/50 text-xl font-bold">→</span>');
+        document.getElementById('rep-phrase-2').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'rep-note-item')).join('<span class="text-white/50 text-xl font-bold">→</span>');
+        switchView('repetition');
+    }
+    function playRepetition() {
+        const fullMelody = [...collectedMelody, ...collectedMelody];
+        const fullAcc = [...defaultAccompaniment.slice(0, collectedMelody.length), ...defaultAccompaniment.slice(0, collectedMelody.length)];
+        playSequence(fullMelody, fullAcc, 'btn-play-rep', 'rep-note-item');
+    }
+    
+    // --- Imitation Logic (UPDATED) ---
+    function setupImitation() {
+        imiPhrase1 = JSON.parse(JSON.stringify(collectedMelody));
+        imiAcc1 = defaultAccompaniment.slice(0, imiPhrase1.length);
+        imiPhrase2 = JSON.parse(JSON.stringify(collectedMelody));
+        imiAcc2 = defaultAccompaniment.slice(0, imiPhrase2.length);
+        
+        if (imiPhrase2.length > 5) imiPhrase2[5] = { notes: ['?'], type: 'editing', duration: 1 };
+        if (imiPhrase2.length > 6) {
+            imiPhrase2[6] = { notes: ['r'], type: 'end', duration: 2, label: '變奏' };
+            imiAcc2[6] = [{n:'s,,', d:0.5}, {n:'r,', d:0.5}, {n:'s,', d:1.0}];
+        }
+        
+        renderImitationPhrases();
+        setEditRhythm('1');
+        switchView('imitation');
+    }
 
-    // --- UI Helpers ---
+    function renderImitationPhrases() {
+        const c1 = document.getElementById('imi-container-1');
+        const c2 = document.getElementById('imi-container-2');
+        const editor = document.getElementById('imi-editor');
+
+        document.getElementById('imi-phrase-1').innerHTML = imiPhrase1.map((item, idx) => {
+             const html = createNoteHTML(item, 'imi-note-item');
+             return item.type === 'editing' ? `<div class="relative group cursor-pointer transform scale-105">${html}</div>` : html;
+        }).join('<span class="text-white/50 text-xl font-bold">→</span>');
+
+        document.getElementById('imi-phrase-2').innerHTML = imiPhrase2.map((item, idx) => {
+            const html = createNoteHTML(item, 'imi-note-item');
+            return item.type === 'editing' ? `<div class="relative group cursor-pointer transform scale-105">${html}</div>` : html;
+        }).join('<span class="text-white/50 text-xl font-bold">→</span>');
+
+        editor.classList.remove('hidden');
+        if (imiPhrase1.some(i => i.type === 'editing')) {
+            c1.appendChild(editor);
+        } else {
+            c2.appendChild(editor);
+        }
+    }
+
+    function swapImitationPhrases() {
+        [imiPhrase1, imiPhrase2] = [imiPhrase2, imiPhrase1];
+        [imiAcc1, imiAcc2] = [imiAcc2, imiAcc1];
+        renderImitationPhrases();
+        
+        const { cell } = getActiveEditingPhraseAndCell();
+        if(cell) {
+             const isSplit = cell.notes.length > 1; 
+             document.getElementById('rhythm-ta').className = !isSplit ? 'px-4 py-2 text-white rounded-lg bg-green-500 font-bold shadow transition-all hover:scale-105' : 'px-4 py-2 text-white rounded-lg font-bold transition-all hover:bg-white/10';
+             document.getElementById('rhythm-titi').className = isSplit ? 'px-4 py-2 text-white rounded-lg bg-green-500 font-bold shadow transition-all hover:scale-105' : 'px-4 py-2 text-white rounded-lg font-bold transition-all hover:bg-white/10';
+        }
+    }
+
+    function getActiveEditingPhraseAndCell() {
+        let phrase = null;
+        let cell = null;
+        if (imiPhrase1.some(i => i.type === 'editing')) {
+            phrase = imiPhrase1;
+        } else if (imiPhrase2.some(i => i.type === 'editing')) {
+            phrase = imiPhrase2;
+        }
+        if(phrase) cell = phrase.find(i => i.type === 'editing');
+        return { phrase, cell };
+    }
+
+    function setEditRhythm(r) {
+        currentEditRhythm = r;
+        const { cell } = getActiveEditingPhraseAndCell();
+        if(!cell) return;
+
+        if (r === 'split') {
+            cell.notes = ['?', '?'];
+        } else {
+            cell.notes = ['?'];
+        }
+        
+        document.getElementById('rhythm-ta').className = r==='1' ? 'px-4 py-2 text-white rounded-lg bg-green-500 font-bold shadow transition-all hover:scale-105' : 'px-4 py-2 text-white rounded-lg font-bold transition-all hover:bg-white/10';
+        document.getElementById('rhythm-titi').className = r==='split' ? 'px-4 py-2 text-white rounded-lg bg-green-500 font-bold shadow transition-all hover:scale-105' : 'px-4 py-2 text-white rounded-lg font-bold transition-all hover:bg-white/10';
+        
+        renderImitationPhrases();
+    }
+
+    function addEditNote(note) {
+        const { cell } = getActiveEditingPhraseAndCell();
+        if(!cell) return;
+
+        if (cell.notes[0] === '?') cell.notes[0] = note;
+        else if (cell.notes.length > 1 && cell.notes[1] === '?') cell.notes[1] = note;
+        else {
+             if (cell.notes.length > 1) cell.notes = [note, '?']; 
+             else cell.notes = [note];
+        }
+        renderImitationPhrases();
+        playNote(note, 0, 0.2, true);
+    }
+
+    function playImitation() {
+        playSequence([...imiPhrase1, ...imiPhrase2], [...imiAcc1, ...imiAcc2], 'btn-play-imi', 'imi-note-item');
+    }
+
+    // --- Upload Logic ---
+    function triggerUpload(technique) {
+        currentTechniqueForUpload = technique;
+        if (technique === 'imitation') {
+            const { cell } = getActiveEditingPhraseAndCell();
+            if (cell && cell.notes.includes('?')) { alert('請先在編輯區完成音符填充，才可上載作品！'); return; }
+        } else if (technique === 'sequence') {
+            if (seqP2.length === 0) { alert('請先選擇模進形式（上行或下行），才可上載作品！'); return; }
+        }
+        document.getElementById('upload-modal').classList.remove('hidden');
+    }
+    function closeUploadModal() { document.getElementById('upload-modal').classList.add('hidden'); }
+    
+    async function confirmUpload() {
+        const grade = document.getElementById('input-grade').value;
+        const cls = document.getElementById('input-class').value;
+        const num = document.getElementById('input-number').value;
+        if (!num || num < 0 || num > 40) { alert('請輸入有效的學號 (0-40)'); return; }
+        const btn = document.getElementById('btn-confirm-upload');
+        btn.disabled = true; btn.innerText = '上載中...';
+        
+        let finalMelody = [];
+        let finalAcc = [];
+
+        if (currentTechniqueForUpload === 'repetition') {
+            finalMelody = [...collectedMelody, ...collectedMelody];
+            const subAcc = defaultAccompaniment.slice(0, collectedMelody.length);
+            finalAcc = [...subAcc, ...subAcc];
+        } 
+        else if (currentTechniqueForUpload === 'imitation') {
+            finalMelody = [...imiPhrase1, ...imiPhrase2];
+            finalAcc = [...imiAcc1, ...imiAcc2];
+        } 
+        else if (currentTechniqueForUpload === 'sequence') {
+            finalMelody = [...seqP1, ...seqP2, ...seqP3, ...seqP4];
+            finalAcc = [...seqAcc1, ...seqAcc2, ...seqAcc3, ...seqAcc4];
+        }
+
+        const firestoreSafeAcc = finalAcc.map(stepArray => ({ notes: stepArray }));
+
+        const dataToUpload = {
+            student_grade: grade, 
+            student_class: cls, 
+            student_number: parseInt(num),
+            technique_used: currentTechniqueForUpload, 
+            melody_data: finalMelody,
+            accompaniment_data: firestoreSafeAcc,
+            created_at: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        try {
+            await db.collection('compositions').add(dataToUpload);
+            alert('🎉 作品上載成功！'); closeUploadModal();
+        } catch (error) { 
+            console.error('Error adding document: ', error); 
+            alert('上載失敗 (Error: ' + error.message + ')'); 
+        } 
+        finally { btn.disabled = false; btn.innerText = '確認上載'; }
+    }
+
+    // --- Gallery Logic (Sorting Added) ---
+    function openGallery() { 
+        showTechniqueAnswers = false; 
+        switchView('gallery'); 
+    }
+
+    function toggleAllGalleryAnswers() {
+        showTechniqueAnswers = !showTechniqueAnswers;
+        renderGalleryItems(document.getElementById('gallery-results'));
+    }
+
+    async function fetchGalleryData() {
+        const grade = document.getElementById('gallery-grade').value;
+        const cls = document.getElementById('gallery-class').value;
+        const container = document.getElementById('gallery-results');
+        
+        container.innerHTML = '<div class="text-center text-white py-10"><div class="animate-spin text-4xl mb-4">⏳</div><div class="text-xl">載入中...</div></div>';
+
+        try {
+            const snapshot = await db.collection('compositions')
+                .where('student_grade', '==', grade)
+                .where('student_class', '==', cls)
+                .get();
+
+            if (snapshot.empty) {
+                container.innerHTML = '<div class="text-center text-white/50 py-20 text-xl font-bold">找不到此班級的作品 📭</div>';
+                return;
+            }
+
+            galleryData = [];
+            snapshot.forEach(doc => {
+                galleryData.push({ id: doc.id, ...doc.data() });
+            });
+
+            sortGalleryData(); // Initial Sort
+
+        } catch (error) {
+            console.error("Gallery fetch error:", error);
+            container.innerHTML = '<div class="text-center text-red-300 py-10 font-bold">讀取資料時發生錯誤，請稍後再試。</div>';
+        }
+    }
+
+    // New Sorting Function
+    function sortGalleryData() {
+        const sortMethod = document.getElementById('gallery-sort').value;
+        const container = document.getElementById('gallery-results');
+
+        if (sortMethod === 'number') {
+            galleryData.sort((a, b) => a.student_number - b.student_number);
+        } else if (sortMethod === 'time') {
+            galleryData.sort((a, b) => {
+                // Handle possible missing timestamps
+                const tA = a.created_at ? a.created_at.seconds : 0;
+                const tB = b.created_at ? b.created_at.seconds : 0;
+                return tB - tA; // Descending (Newest first)
+            });
+        }
+        renderGalleryItems(container);
+    }
+
+    function renderGalleryItems(container) {
+        container.innerHTML = '';
+        galleryData.forEach((item, index) => {
+            const techniqueLabels = {
+                'repetition': '🔄 重複句',
+                'imitation': '🦜 模仿句',
+                'sequence': '📈 模進句'
+            };
+            const realLabel = techniqueLabels[item.technique_used] || '一般創作';
+            
+            const labelHtml = showTechniqueAnswers 
+                ? realLabel 
+                : `<span class="cursor-pointer bg-white/20 px-3 py-1 rounded-lg hover:bg-white/40 transition-colors" onclick="this.innerHTML='${realLabel}'; this.classList.remove('cursor-pointer','bg-white/20')">❓ 猜猜看</span>`;
+
+            const uniqueClass = `gallery-note-${item.id}`;
+            const midIndex = Math.ceil(item.melody_data.length / 2);
+            const row1Data = item.melody_data.slice(0, midIndex);
+            const row2Data = item.melody_data.slice(midIndex);
+
+            const card = document.createElement('div');
+            card.className = 'glass rounded-2xl p-5 border border-white/20 hover:scale-[1.01] transition-transform duration-300';
+            
+            let visHTML = `<div id="melody-vis-${item.id}" class="hidden mb-5 p-4 bg-black/30 rounded-xl border border-white/10">`;
+            visHTML += `<div class="mb-2 text-xs text-white/70 font-bold uppercase tracking-widest">第一句</div>`;
+            visHTML += `<div class="flex gap-2 mb-4 overflow-x-auto custom-scrollbar pb-2">`;
+            visHTML += row1Data.map(note => createNoteHTML(note, uniqueClass)).join('<span class="text-white/50 self-center text-lg">→</span>');
+            visHTML += `</div>`;
+            if(row2Data.length > 0) {
+                visHTML += `<div class="mb-2 text-xs text-white/70 font-bold uppercase tracking-widest">第二句</div>`;
+                visHTML += `<div class="flex gap-2 overflow-x-auto custom-scrollbar pb-2">`;
+                visHTML += row2Data.map(note => createNoteHTML(note, uniqueClass)).join('<span class="text-white/50 self-center text-lg">→</span>');
+                visHTML += `</div>`;
+            }
+            visHTML += `</div>`;
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-rose-600 flex items-center justify-center text-xl font-bold shadow-lg border-2 border-white/20">
+                            ${item.student_number}
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-white">${item.student_grade}年級 ${item.student_class}班</div>
+                            <div class="text-xs text-white/60">學號 #${item.student_number}</div>
+                        </div>
+                    </div>
+                    <div class="px-3 py-1.5 rounded-lg bg-indigo-600/60 text-indigo-100 text-xs font-bold border border-indigo-400/30 backdrop-blur-md">
+                        ${labelHtml}
+                    </div>
+                </div>
+                
+                ${visHTML}
+
+                <div class="flex gap-3">
+                    <button onclick="playGalleryItem('${item.id}', ${index})" id="btn-gal-play-${item.id}" class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold text-sm hover:from-emerald-600 hover:to-teal-700 shadow-md flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5">
+                        <span>▶</span> 播放
+                    </button>
+                    <button onclick="toggleGalleryMelody('${item.id}')" class="flex-1 py-2.5 bg-white/10 text-white rounded-xl font-bold text-sm hover:bg-white/20 border border-white/10 transition-colors flex items-center justify-center gap-2">
+                        <span>👁️</span> 樂譜
+                    </button>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function toggleGalleryMelody(id) {
+        const el = document.getElementById(`melody-vis-${id}`);
+        el.classList.toggle('hidden');
+    }
+
+    function playGalleryItem(id, index) {
+        const item = galleryData[index];
+        let usableAcc = [];
+        if (item.accompaniment_data && Array.isArray(item.accompaniment_data)) {
+            if (item.accompaniment_data.length > 0 && item.accompaniment_data[0].notes) {
+                usableAcc = item.accompaniment_data.map(wrapper => wrapper.notes);
+            } else {
+                usableAcc = item.accompaniment_data;
+            }
+        }
+        
+        if (usableAcc.length === 0) {
+            for(let i=0; i < item.melody_data.length; i++) {
+                 let patternIdx = i % defaultAccompaniment.length;
+                 usableAcc.push(defaultAccompaniment[patternIdx]);
+            }
+        }
+        playSequence(item.melody_data, usableAcc, `btn-gal-play-${id}`, `gallery-note-${id}`);
+    }
+
+    // --- UI Utils (UPDATED Color Logic) ---
+    function createNoteHTML(item, extraClass='') {
+        let bg = '';
+        let extraStyle = '';
+        
+        if (item.type === 'editing') {
+             // Logic: Check note array length to determine color
+             let isSplit = item.notes && item.notes.length > 1;
+             bg = isSplit ? 'bg-gradient-to-r from-orange-400 to-amber-500' : 'bg-gradient-to-r from-blue-400 to-cyan-500';
+             extraClass += ' border-4 border-yellow-300 ring-4 ring-yellow-500/30 scale-105 z-10';
+        } else {
+             bg = item.type === 'split' ? 'bg-gradient-to-r from-orange-400 to-amber-500' :
+                  item.type === 'end' ? 'bg-gradient-to-r from-pink-500 to-pink-600' :
+                  'bg-gradient-to-r from-blue-400 to-cyan-500';
+        }
+
+        let isSplit = item.notes && item.notes.length > 1;
+        let icon = isSplit ? '♪♪' : item.type === 'end' ? '𝅗𝅥' : '♩';
+        let notes = item.notes ? item.notes.join(' ') : '?';
+        
+        return `<div class="${extraClass} ${bg} note-card px-3 py-2 rounded-lg text-white font-bold shadow-lg flex flex-col items-center min-w-[3.5rem] transition-all transform hover:scale-110">
+            <span class="text-xl drop-shadow-sm">${notes}</span>
+            <span class="text-[10px] opacity-90 mt-1 bg-black/20 px-1.5 rounded">${icon}</span>
+        </div>`;
+    }
+
     function drawPath() {
         const svg = document.getElementById('path-svg');
         if (visitedCells.length < 2) { svg.innerHTML = ''; return; }
@@ -575,38 +1192,20 @@
         svg.innerHTML = '';
         svg.appendChild(path);
     }
-
-    function createNoteHTML(item, extraClass='') {
-        let bg = item.type === 'split' ? 'bg-gradient-to-r from-orange-400 to-amber-500' :
-                 item.type === 'end' ? 'bg-gradient-to-r from-pink-500 to-pink-600' :
-                 item.type === 'editing' ? 'bg-gray-500 border-2 border-yellow-300' :
-                 'bg-gradient-to-r from-blue-400 to-cyan-500';
-        let icon = item.type === 'split' ? '♪♪' : item.type === 'end' ? '𝅗𝅥' : '♩';
-        let notes = item.notes ? item.notes.join(' ') : '?';
-        
-        return `<div class="${extraClass} ${bg} px-3 py-2 rounded-lg text-white font-medium shadow-md flex flex-col items-center min-w-[3rem]">
-            <span class="text-lg">${notes}</span>
-            <span class="text-xs opacity-80">${icon}</span>
-        </div>`;
-    }
-
     function updateMelodyDisplay() {
-        document.getElementById('melody-display').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'melody-note melody-note-item')).join('<span class="text-white/50">→</span>');
+        document.getElementById('melody-display').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'melody-note melody-note-item')).join('<span class="text-white/30 text-xl font-bold">→</span>');
         document.getElementById('step-count').textContent = collectedMelody.length;
     }
-
     function showCompletion() {
         const msg = document.createElement('div');
-        msg.className = 'win-msg w-full text-center mt-4 p-3 bg-white/20 rounded-xl text-yellow-300 font-bold animate-pulse';
-        msg.textContent = '🎉 抵達終點！現在可以加入伴奏或使用作曲手法！ 🎉';
+        msg.className = 'win-msg w-full text-center mt-4 p-4 glass-dark rounded-xl text-yellow-300 font-bold animate-pulse border border-yellow-500/30';
+        msg.innerHTML = '<span class="text-2xl">🎉</span> 抵達終點！現在可以加入伴奏或使用作曲手法！';
         document.getElementById('melody-display').parentElement.appendChild(msg);
         document.getElementById('play-acc-btn').classList.remove('hidden');
         document.getElementById('technique-btn').classList.remove('hidden');
     }
-
-    // --- Views ---
     function switchView(view) {
-        ['view-game', 'view-technique-menu', 'view-repetition', 'view-imitation', 'view-sequence'].forEach(id => document.getElementById(id).classList.add('hidden'));
+        ['view-game', 'view-technique-menu', 'view-repetition', 'view-imitation', 'view-sequence', 'view-gallery'].forEach(id => document.getElementById(id).classList.add('hidden'));
         if (view === 'menu') {
             document.getElementById('view-game').classList.remove('hidden');
             document.getElementById('view-technique-menu').classList.remove('hidden');
@@ -614,11 +1213,9 @@
             document.getElementById(`view-${view}`).classList.remove('hidden');
         }
     }
-
     document.getElementById('technique-btn').addEventListener('click', () => switchView('menu'));
     function closeTechniqueMenu() { document.getElementById('view-technique-menu').classList.add('hidden'); }
     function backToGame() { switchView('game'); }
-
     function selectTechnique(type) {
         closeTechniqueMenu();
         if (type === 'repetition') setupRepetition();
@@ -626,76 +1223,11 @@
         else if (type === 'sequence') setupSequenceView();
     }
 
-    // --- Repetition & Imitation & Editor Logic (Kept from previous) ---
-    function setupRepetition() {
-        document.getElementById('rep-phrase-1').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'rep-note-item')).join('<span class="text-white/50">→</span>');
-        document.getElementById('rep-phrase-2').innerHTML = collectedMelody.map(i => createNoteHTML(i, 'rep-note-item')).join('<span class="text-white/50">→</span>');
-        switchView('repetition');
-    }
-    function playRepetition() {
-        const fullMelody = [...collectedMelody, ...collectedMelody];
-        const fullAcc = [...defaultAccompaniment.slice(0, collectedMelody.length), ...defaultAccompaniment.slice(0, collectedMelody.length)];
-        playSequence(fullMelody, fullAcc, 'btn-play-rep', 'rep-note-item');
-    }
-    function setupImitation() {
-        imiPhrase1 = JSON.parse(JSON.stringify(collectedMelody));
-        imiAcc1 = defaultAccompaniment.slice(0, imiPhrase1.length);
-        imiPhrase2 = JSON.parse(JSON.stringify(collectedMelody));
-        imiAcc2 = defaultAccompaniment.slice(0, imiPhrase2.length);
-        if (imiPhrase2.length > 5) imiPhrase2[5] = { notes: ['?'], type: 'editing', duration: 1 };
-        if (imiPhrase2.length > 6) {
-            imiPhrase2[6] = { notes: ['r'], type: 'end', duration: 2, label: '變奏' };
-            imiAcc2[6] = [{n:'s,,', d:0.5}, {n:'r,', d:0.5}, {n:'s,', d:1.0}];
-        }
-        renderImitationPhrases();
-        setEditRhythm('1');
-        switchView('imitation');
-    }
-    function renderImitationPhrases() {
-        document.getElementById('imi-phrase-1').innerHTML = imiPhrase1.map(i => createNoteHTML(i, 'imi-note-item')).join('<span class="text-white/50">→</span>');
-        document.getElementById('imi-phrase-2').innerHTML = imiPhrase2.map((item, idx) => {
-            const html = createNoteHTML(item, 'imi-note-item');
-            return idx === 5 ? `<div class="relative group cursor-pointer border-2 border-yellow-300 rounded-lg transform scale-105">${html}</div>` : html;
-        }).join('<span class="text-white/50">→</span>');
-    }
-    function setEditRhythm(r) {
-        currentEditRhythm = r;
-        imiPhrase2[5].type = r === 'split' ? 'split' : 'normal';
-        imiPhrase2[5].notes = r === 'split' ? ['?', '?'] : ['?'];
-        document.getElementById('rhythm-ta').className = r==='1' ? 'px-3 py-1 text-white rounded-md bg-green-500' : 'px-3 py-1 text-white rounded-md hover:bg-white/20';
-        document.getElementById('rhythm-titi').className = r==='split' ? 'px-3 py-1 text-white rounded-md bg-green-500' : 'px-3 py-1 text-white rounded-md hover:bg-white/20';
-        renderImitationPhrases();
-    }
-    function addEditNote(note) {
-        const cell = imiPhrase2[5];
-        if (cell.notes[0] === '?') cell.notes[0] = note;
-        else if (cell.type === 'split' && cell.notes[1] === '?') cell.notes[1] = note;
-        else cell.notes = cell.type === 'split' ? [note, '?'] : [note];
-        renderImitationPhrases();
-        playNote(note, 0, 0.2, true);
-    }
-    function playImitation() {
-        playSequence([...imiPhrase1, ...imiPhrase2], [...imiAcc1, ...imiAcc2], 'btn-play-imi', 'imi-note-item');
-    }
-    function swapImitationPhrases() {
-        [imiPhrase1, imiPhrase2] = [imiPhrase2, imiPhrase1];
-        [imiAcc1, imiAcc2] = [imiAcc2, imiAcc1];
-        renderImitationPhrases();
-    }
-
-    // Init
     window.addEventListener('resize', drawPath);
     document.getElementById('play-btn').addEventListener('click', () => playSequence(collectedMelody, null, 'play-btn', 'melody-note'));
     document.getElementById('play-acc-btn').addEventListener('click', () => playSequence(collectedMelody, defaultAccompaniment.slice(0, collectedMelody.length), 'play-acc-btn', 'melody-note'));
     document.getElementById('reset-btn').addEventListener('click', generateBoard);
-
-    if (window.elementSdk) {
-        window.elementSdk.init({
-            defaultConfig,
-            onConfigChange: (c) => document.getElementById('game-title').textContent = `🎵 ${c.game_title||'旋律創作棋盤'} 🎵`
-        });
-    }
-
+    
     generateBoard();
   </script>
  </body>
