@@ -3,7 +3,7 @@
  <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>旋律創作棋盤 (最終完美版)</title>
+  <title>旋律創作棋盤 (名單整合版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/_sdk/element_sdk.js"></script>
   
@@ -139,7 +139,7 @@
       fill: none; filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6)); 
       transition: all 0.3s ease;
       stroke-dasharray: 20;
-      /* Modified animation direction: -1000 moves dashes forward along the path */
+      /* Animation direction: -1000 moves dashes forward along the path */
       animation: dash 30s linear infinite;
     }
     @keyframes dash { to { stroke-dashoffset: -1000; } }
@@ -507,6 +507,17 @@
     try { db = firebase.firestore(); } catch (e) { console.error("Firestore Init Error:", e); }
     
     // --- Data ---
+    // Class 4A Name List 
+    const class4AList = {
+        1: "陳穎淘", 2: "陳以心", 3: "鄭雋熙", 4: "鄭伊淳", 5: "莊廷樂",
+        6: "蔡子浚", 7: "朱泓翰", 10: "馮天諾", 11: "古煒樂", 12: "羅沛琪",
+        13: "李泳翹", 14: "梁竣添", 15: "梁善悠", 16: "連天朗", 17: "劉昊暻",
+        18: "廖悦童", 19: "盧芷瑩", 20: "龍柏琛", 21: "伍希晨", 22: "彭詩晴",
+        23: "譚嘉妍", 24: "譚芷昕", 25: "鄧靖藍", 26: "鄧洛淞", 27: "黃耀鋒",
+        28: "嚴心凌", 29: "楊凱澄", 30: "楊月意", 31: "嚴啟博", 32: "余樂睎",
+        33: "余蔚嵐", 34: "翁悠"
+    };
+
     const scaleArray = [
         'd,,', 'r,,', 'm,,', 'f,,', 's,,', 'l,,', 't,,', 
         'd,', 'r,', 'm,', 'f,', 's,', 'l,', 't,', 
@@ -1000,7 +1011,7 @@
         finally { btn.disabled = false; btn.innerText = '確認上載'; }
     }
 
-    // --- Gallery Logic (Sorting Added) ---
+    // --- Gallery Logic (Sorting) ---
     function openGallery() { 
         showTechniqueAnswers = false; 
         switchView('gallery'); 
@@ -1034,7 +1045,7 @@
                 galleryData.push({ id: doc.id, ...doc.data() });
             });
 
-            sortGalleryData(); // Initial Sort
+            sortGalleryData(); // Apply sort after fetch
 
         } catch (error) {
             console.error("Gallery fetch error:", error);
@@ -1042,7 +1053,6 @@
         }
     }
 
-    // New Sorting Function
     function sortGalleryData() {
         const sortMethod = document.getElementById('gallery-sort').value;
         const container = document.getElementById('gallery-results');
@@ -1051,10 +1061,9 @@
             galleryData.sort((a, b) => a.student_number - b.student_number);
         } else if (sortMethod === 'time') {
             galleryData.sort((a, b) => {
-                // Handle possible missing timestamps
                 const tA = a.created_at ? a.created_at.seconds : 0;
                 const tB = b.created_at ? b.created_at.seconds : 0;
-                return tB - tA; // Descending (Newest first)
+                return tB - tA; // Descending
             });
         }
         renderGalleryItems(container);
@@ -1078,6 +1087,15 @@
             const midIndex = Math.ceil(item.melody_data.length / 2);
             const row1Data = item.melody_data.slice(0, midIndex);
             const row2Data = item.melody_data.slice(midIndex);
+
+            // Student Name Mapping 
+            let studentDisplayName = `學號 #${item.student_number}`;
+            if (item.student_grade == '4' && item.student_class == 'A') {
+                const name = class4AList[item.student_number];
+                if (name) {
+                    studentDisplayName += ` (${name})`;
+                }
+            }
 
             const card = document.createElement('div');
             card.className = 'glass rounded-2xl p-5 border border-white/20 hover:scale-[1.01] transition-transform duration-300';
@@ -1103,7 +1121,7 @@
                         </div>
                         <div>
                             <div class="text-lg font-bold text-white">${item.student_grade}年級 ${item.student_class}班</div>
-                            <div class="text-xs text-white/60">學號 #${item.student_number}</div>
+                            <div class="text-xs text-white/60">${studentDisplayName}</div>
                         </div>
                     </div>
                     <div class="px-3 py-1.5 rounded-lg bg-indigo-600/60 text-indigo-100 text-xs font-bold border border-indigo-400/30 backdrop-blur-md">
